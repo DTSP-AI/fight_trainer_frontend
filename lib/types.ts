@@ -181,6 +181,8 @@ export interface SessionCreateRequest {
   // backend marks the source row fulfilled.
   scheduled_session_id?: string | null;
   planned_session_id?: string | null;
+  // Skip the AI analysis pipeline. Used for plain check-offs.
+  quick_log?: boolean;
 }
 
 export interface SessionCreateResponse {

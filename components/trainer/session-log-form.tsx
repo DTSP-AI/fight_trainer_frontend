@@ -6,6 +6,7 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { toast } from 'sonner';
+import { ChevronDown, ChevronUp } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -17,7 +18,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { VoiceModeBadge } from '@/components/trainer/voice-mode-badge';
 import { studentsApi } from '@/lib/api/students';
 import { sessionsApi } from '@/lib/api/sessions';
 import { describeApiError } from '@/lib/api';
@@ -26,6 +26,8 @@ import type { Student } from '@/lib/types';
 const schema = z.object({
   student_id: z.string().min(1, 'Pick a student'),
   session_date: z.string().min(1, 'Required'),
+  // Everything below is optional — only filled when the trainer opens the
+  // "Add details" disclosure.
   duration_minutes: z.string().optional(),
   notes: z.string().optional(),
   coaching_cues: z.string().optional(),
@@ -35,7 +37,6 @@ const schema = z.object({
 });
 
 type FormValues = z.infer<typeof schema>;
-type SubmitValues = FormValues;
 
 function toNumOrNull(v: string | undefined): number | null {
   if (v === undefined || v === '') return null;
@@ -55,6 +56,7 @@ export function SessionLogForm() {
 
   const [students, setStudents] = useState<Student[] | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [expanded, setExpanded] = useState(false);
 
   const {
     register,
@@ -67,13 +69,13 @@ export function SessionLogForm() {
     defaultValues: {
       student_id: initialStudent,
       session_date: initialDate || today(),
-      notes: '',
-      coaching_cues: '',
-      voice_transcript: '',
     },
   });
 
   const studentId = watch('student_id');
+  const notes = watch('notes');
+  const cues = watch('coaching_cues');
+  const transcript = watch('voice_transcript');
 
   useEffect(() => {
     let cancelled = false;
@@ -88,9 +90,16 @@ export function SessionLogForm() {
     };
   }, []);
 
-  async function onSubmit(values: SubmitValues) {
+  async function onSubmit(values: FormValues) {
     setSubmitting(true);
     try {
+      // If the trainer didn't fill any AI signal (notes/cues/transcript),
+      // skip the analysis pipeline. It's a no-op without those fields.
+      const hasSignal = !!(
+        values.notes?.trim() ||
+        values.coaching_cues?.trim() ||
+        values.voice_transcript?.trim()
+      );
       const created = await sessionsApi.create({
         student_id: values.student_id,
         session_date: values.session_date,
@@ -103,10 +112,11 @@ export function SessionLogForm() {
         mode: 'text',
         scheduled_session_id: scheduledSessionId || null,
         planned_session_id: plannedSessionId || null,
+        quick_log: !hasSignal,
       });
-      toast.success('Session logged. Pipeline kicked off.', {
-        description: 'Clip delivery typically lands within ~90 seconds.',
-      });
+      toast.success(
+        hasSignal ? 'Logged. Pipeline kicked off.' : 'Marked logged.',
+      );
       router.push(`/trainer/sessions/${created.session_id}`);
     } catch (err) {
       toast.error(describeApiError(err));
@@ -115,21 +125,21 @@ export function SessionLogForm() {
     }
   }
 
+  const linkedToCalendar = !!(scheduledSessionId || plannedSessionId);
+
   return (
     <form
       onSubmit={handleSubmit(onSubmit)}
-      className="grid max-w-3xl gap-6"
+      className="grid max-w-2xl gap-6"
       noValidate
     >
-      {/* Manifest M2 — voice mode seam visible on the session-log surface. */}
-      <VoiceModeBadge />
-
-      {scheduledSessionId || plannedSessionId ? (
+      {linkedToCalendar ? (
         <p className="rounded-md border border-emerald-500/40 bg-emerald-500/10 p-3 text-xs text-emerald-100">
-          Logging this will mark the calendar event as <strong>completed</strong>.
+          This will mark the calendar event as <strong>completed</strong>.
         </p>
       ) : null}
 
+      {/* The two fields that matter every time. */}
       <div className="grid gap-4 md:grid-cols-2">
         <div className="grid gap-2">
           <Label>Student</Label>
@@ -138,7 +148,9 @@ export function SessionLogForm() {
             onValueChange={(v) => setValue('student_id', v)}
           >
             <SelectTrigger>
-              <SelectValue placeholder={students ? 'Pick a student' : 'Loading…'} />
+              <SelectValue
+                placeholder={students ? 'Pick a student' : 'Loading…'}
+              />
             </SelectTrigger>
             <SelectContent>
               {(students ?? []).map((s) => (
@@ -149,11 +161,13 @@ export function SessionLogForm() {
             </SelectContent>
           </Select>
           {errors.student_id ? (
-            <p className="text-xs text-destructive">{errors.student_id.message}</p>
+            <p className="text-xs text-destructive">
+              {errors.student_id.message}
+            </p>
           ) : null}
         </div>
         <div className="grid gap-2">
-          <Label htmlFor="session_date">Session date</Label>
+          <Label htmlFor="session_date">Date</Label>
           <Input
             id="session_date"
             type="date"
@@ -162,73 +176,105 @@ export function SessionLogForm() {
         </div>
       </div>
 
-      <div className="grid gap-4 md:grid-cols-3">
-        <div className="grid gap-2">
-          <Label htmlFor="duration_minutes">Duration (min)</Label>
-          <Input
-            id="duration_minutes"
-            type="number"
-            min={1}
-            inputMode="numeric"
-            {...register('duration_minutes')}
-          />
-        </div>
-        <div className="grid gap-2">
-          <Label htmlFor="sparring_rounds_count">Sparring rounds</Label>
-          <Input
-            id="sparring_rounds_count"
-            type="number"
-            min={0}
-            inputMode="numeric"
-            {...register('sparring_rounds_count')}
-          />
-        </div>
-        <div className="grid gap-2">
-          <Label htmlFor="student_self_rating">Self rating (1-10)</Label>
-          <Input
-            id="student_self_rating"
-            type="number"
-            min={1}
-            max={10}
-            inputMode="numeric"
-            {...register('student_self_rating')}
-          />
-        </div>
-      </div>
+      {/* Everything else hidden by default. */}
+      <button
+        type="button"
+        onClick={() => setExpanded((v) => !v)}
+        className="flex items-center gap-2 self-start text-xs text-muted-foreground hover:text-foreground"
+      >
+        {expanded ? (
+          <ChevronUp className="h-4 w-4" />
+        ) : (
+          <ChevronDown className="h-4 w-4" />
+        )}
+        {expanded
+          ? 'Hide details'
+          : 'Add details + run AI analysis (optional)'}
+      </button>
 
-      <div className="grid gap-2">
-        <Label htmlFor="notes">Session notes</Label>
-        <Textarea
-          id="notes"
-          rows={5}
-          placeholder="What we worked. What landed in live. What broke down."
-          {...register('notes')}
-        />
-      </div>
+      {expanded ? (
+        <div className="grid gap-4 rounded-md border border-border bg-card/40 p-4">
+          <p className="text-xs text-muted-foreground">
+            Filling notes, cues, or a transcript triggers the analysis
+            pipeline so the student gets clip recommendations within ~90s.
+            Leave them blank for a plain check-off.
+          </p>
 
-      <div className="grid gap-2">
-        <Label htmlFor="coaching_cues">Coaching cues</Label>
-        <Textarea
-          id="coaching_cues"
-          rows={3}
-          placeholder="The 1-3 things you'd repeat in your student's ear."
-          {...register('coaching_cues')}
-        />
-      </div>
+          <div className="grid gap-2">
+            <Label htmlFor="notes">Notes</Label>
+            <Textarea
+              id="notes"
+              rows={4}
+              placeholder="What we worked. What landed in live. What broke down."
+              {...register('notes')}
+            />
+          </div>
 
-      <div className="grid gap-2">
-        <Label htmlFor="voice_transcript">Voice transcript (optional)</Label>
-        <Textarea
-          id="voice_transcript"
-          rows={4}
-          placeholder="Paste a dictation transcript here — the pipeline reads this if present."
-          {...register('voice_transcript')}
-        />
-      </div>
+          <div className="grid gap-2">
+            <Label htmlFor="coaching_cues">Coaching cues</Label>
+            <Textarea
+              id="coaching_cues"
+              rows={2}
+              placeholder="The 1-3 things you'd repeat in your student's ear."
+              {...register('coaching_cues')}
+            />
+          </div>
+
+          <div className="grid gap-4 md:grid-cols-3">
+            <div className="grid gap-2">
+              <Label htmlFor="duration_minutes">Duration (min)</Label>
+              <Input
+                id="duration_minutes"
+                type="number"
+                min={1}
+                inputMode="numeric"
+                {...register('duration_minutes')}
+              />
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="sparring_rounds_count">Rounds</Label>
+              <Input
+                id="sparring_rounds_count"
+                type="number"
+                min={0}
+                inputMode="numeric"
+                {...register('sparring_rounds_count')}
+              />
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="student_self_rating">Self-rating (1-10)</Label>
+              <Input
+                id="student_self_rating"
+                type="number"
+                min={1}
+                max={10}
+                inputMode="numeric"
+                {...register('student_self_rating')}
+              />
+            </div>
+          </div>
+
+          <div className="grid gap-2">
+            <Label htmlFor="voice_transcript">
+              Voice transcript (optional)
+            </Label>
+            <Textarea
+              id="voice_transcript"
+              rows={3}
+              placeholder="Paste a dictation transcript — the pipeline reads it if present."
+              {...register('voice_transcript')}
+            />
+          </div>
+        </div>
+      ) : null}
 
       <div className="flex items-center gap-2">
         <Button type="submit" disabled={submitting}>
-          {submitting ? 'Logging…' : 'Log session'}
+          {submitting
+            ? 'Saving…'
+            : notes || cues || transcript
+              ? 'Log + run analysis'
+              : 'Mark logged'}
         </Button>
         <Button
           type="button"

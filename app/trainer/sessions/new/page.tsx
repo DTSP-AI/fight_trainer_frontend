@@ -8,7 +8,8 @@ export default function NewSessionPage() {
       <div>
         <h1 className="text-3xl font-semibold tracking-tight">Log session</h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          Pick the student, the technique, drop a cue. Pipeline does the rest.
+          Pick a student, pick a date, hit save. Add details only when you
+          want the AI pipeline to chew on them.
         </p>
       </div>
       <Suspense fallback={<LoadingState />}>
