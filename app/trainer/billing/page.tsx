@@ -3,10 +3,12 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   Bell,
+  CalendarDays,
   CalendarPlus,
   Check,
   CircleSlash,
   Layers,
+  List,
   Plus,
   X,
 } from 'lucide-react';
@@ -18,6 +20,7 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import { EmptyState } from '@/components/common/empty-state';
+import { SessionsCalendar } from '@/components/trainer/sessions-calendar';
 import {
   billingApi,
   type PackageRow,
@@ -87,6 +90,13 @@ export default function TrainerBillingHubPage() {
   const [error, setError] = useState<string | null>(null);
   const [scheduleFilter, setScheduleFilter] =
     useState<'upcoming' | 'past' | 'all'>('upcoming');
+  const [scheduleView, setScheduleView] = useState<'calendar' | 'list'>(
+    'calendar',
+  );
+  const [scheduleFormOpen, setScheduleFormOpen] = useState(false);
+  const [prefillDateTime, setPrefillDateTime] = useState<string | undefined>(
+    undefined,
+  );
 
   const refresh = useCallback(async () => {
     try {
@@ -184,46 +194,96 @@ export default function TrainerBillingHubPage() {
           title="Sessions"
           subtitle="Schedule, confirm, and mark sessions complete or no-show."
         />
-        <ScheduleNewForm
-          students={students}
-          services={services}
-          packages={packages}
-          onCreated={refresh}
-        />
-        <div className="flex gap-2">
-          {(['upcoming', 'past', 'all'] as const).map((f) => (
-            <Button
-              key={f}
-              variant={scheduleFilter === f ? 'default' : 'outline'}
-              size="sm"
-              onClick={() => setScheduleFilter(f)}
-            >
-              {f}
-            </Button>
-          ))}
-        </div>
-        {filteredSessions.length === 0 ? (
-          <EmptyState
-            title="No sessions"
-            description={
-              scheduleFilter === 'upcoming'
-                ? 'Schedule one with the form above.'
-                : 'Nothing here yet.'
-            }
+
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <ScheduleNewForm
+            students={students}
+            services={services}
+            packages={packages}
+            onCreated={refresh}
+            open={scheduleFormOpen}
+            onOpenChange={(next) => {
+              setScheduleFormOpen(next);
+              if (!next) setPrefillDateTime(undefined);
+            }}
+            defaultDateTime={prefillDateTime}
           />
-        ) : (
-          <div className="space-y-2">
-            {filteredSessions.map((s) => (
-              <SessionRow
-                key={s.id}
-                s={s}
-                student={studentMap.get(s.student_id)}
-                service={serviceMap.get(s.service_id)}
-                pkg={s.package_id ? packageMap.get(s.package_id) : undefined}
-                onChanged={refresh}
-              />
-            ))}
+          <div className="flex gap-1 rounded-md border border-border p-1">
+            <Button
+              size="sm"
+              variant={scheduleView === 'calendar' ? 'default' : 'ghost'}
+              onClick={() => setScheduleView('calendar')}
+            >
+              <CalendarDays className="h-4 w-4" />
+              Calendar
+            </Button>
+            <Button
+              size="sm"
+              variant={scheduleView === 'list' ? 'default' : 'ghost'}
+              onClick={() => setScheduleView('list')}
+            >
+              <List className="h-4 w-4" />
+              List
+            </Button>
           </div>
+        </div>
+
+        {scheduleView === 'calendar' ? (
+          <Card>
+            <CardContent className="py-4">
+              <SessionsCalendar
+                sessions={sessions}
+                studentMap={studentMap}
+                serviceMap={serviceMap}
+                packageMap={packageMap}
+                onChanged={refresh}
+                onPickDay={(dt) => {
+                  setPrefillDateTime(dt);
+                  setScheduleFormOpen(true);
+                }}
+              />
+            </CardContent>
+          </Card>
+        ) : (
+          <>
+            <div className="flex gap-2">
+              {(['upcoming', 'past', 'all'] as const).map((f) => (
+                <Button
+                  key={f}
+                  variant={scheduleFilter === f ? 'default' : 'outline'}
+                  size="sm"
+                  onClick={() => setScheduleFilter(f)}
+                >
+                  {f}
+                </Button>
+              ))}
+            </div>
+            {filteredSessions.length === 0 ? (
+              <EmptyState
+                title="No sessions"
+                description={
+                  scheduleFilter === 'upcoming'
+                    ? 'Schedule one with the form above.'
+                    : 'Nothing here yet.'
+                }
+              />
+            ) : (
+              <div className="space-y-2">
+                {filteredSessions.map((s) => (
+                  <SessionRow
+                    key={s.id}
+                    s={s}
+                    student={studentMap.get(s.student_id)}
+                    service={serviceMap.get(s.service_id)}
+                    pkg={
+                      s.package_id ? packageMap.get(s.package_id) : undefined
+                    }
+                    onChanged={refresh}
+                  />
+                ))}
+              </div>
+            )}
+          </>
         )}
       </section>
     </div>
@@ -723,17 +783,27 @@ function ScheduleNewForm({
   services,
   packages,
   onCreated,
+  open,
+  onOpenChange,
+  defaultDateTime,
 }: {
   students: Student[];
   services: ServiceRow[];
   packages: PackageRow[];
   onCreated: () => void;
+  open: boolean;
+  onOpenChange: (next: boolean) => void;
+  defaultDateTime?: string;
 }) {
-  const [open, setOpen] = useState(false);
   const [studentId, setStudentId] = useState('');
   const [packageId, setPackageId] = useState('');
   const [serviceId, setServiceId] = useState('');
-  const [scheduledFor, setScheduledFor] = useState('');
+  const [scheduledFor, setScheduledFor] = useState(defaultDateTime ?? '');
+
+  // Adopt a freshly-picked day from the calendar.
+  useEffect(() => {
+    if (defaultDateTime) setScheduledFor(defaultDateTime);
+  }, [defaultDateTime]);
   const [duration, setDuration] = useState('60');
   const [price, setPrice] = useState('80');
   const [notes, setNotes] = useState('');
@@ -786,7 +856,7 @@ function ScheduleNewForm({
         notes: notes || undefined,
       });
       toast.success('Session scheduled');
-      setOpen(false);
+      onOpenChange(false);
       setNotes('');
       setScheduledFor('');
       setStudentId('');
@@ -802,7 +872,7 @@ function ScheduleNewForm({
 
   if (!open) {
     return (
-      <Button onClick={() => setOpen(true)} variant="outline" size="sm">
+      <Button onClick={() => onOpenChange(true)} variant="outline" size="sm">
         <CalendarPlus className="h-4 w-4" />
         Schedule a session
       </Button>
@@ -921,7 +991,7 @@ function ScheduleNewForm({
             <Button
               type="button"
               variant="ghost"
-              onClick={() => setOpen(false)}
+              onClick={() => onOpenChange(false)}
             >
               Cancel
             </Button>
