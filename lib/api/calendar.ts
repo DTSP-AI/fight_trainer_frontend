@@ -77,4 +77,10 @@ export const calendarApi = {
     apiClient.get<CalendarEvent[]>('/api/calendar/missed'),
   sweepMissed: () =>
     apiClient.post<MissedSweepResult>('/api/calendar/sweep-missed', {}),
+  /** One-click 'this happened' — no form, no AI pipeline. */
+  markComplete: (kind: CalendarEventKind, id: string) =>
+    apiClient.post<{ session_id: string; kind: CalendarEventKind }>(
+      '/api/calendar/complete',
+      { kind, id },
+    ),
 };

@@ -29,10 +29,11 @@ import {
   type ScheduleStatus,
   type ServiceRow,
 } from '@/lib/api/billing';
-import type {
-  CalendarEvent,
-  PlannedEvent,
-  ScheduledEvent,
+import {
+  calendarApi,
+  type CalendarEvent,
+  type PlannedEvent,
+  type ScheduledEvent,
 } from '@/lib/api/calendar';
 import { describeApiError } from '@/lib/api';
 import type { Student } from '@/lib/types';
@@ -406,8 +407,22 @@ function EventDetailDialog({
     }
   }
 
+  async function markDone() {
+    if (!event) return;
+    setBusy(true);
+    try {
+      await calendarApi.markComplete(event.kind, event.id);
+      toast.success('Marked done');
+      onChanged();
+    } catch (err) {
+      toast.error(describeApiError(err));
+    } finally {
+      setBusy(false);
+    }
+  }
+
   function logSession() {
-    // Pre-fill the log form with student + linkage IDs + the event's date.
+    // Optional path — full log form runs the AI pipeline.
     const dateOnly = event!.starts_at.slice(0, 10);
     const params = new URLSearchParams({
       studentId: event!.student_id,
@@ -486,46 +501,57 @@ function EventDetailDialog({
           ) : null}
         </div>
 
-        <DialogFooter className="flex-wrap gap-2">
-          {/* Log Session — primary CTA when not yet fulfilled */}
-          {!event.fulfilled_session_id ? (
-            <Button onClick={logSession} disabled={busy}>
-              <Check className="h-4 w-4" />
-              Log session
-            </Button>
-          ) : null}
+        <DialogFooter className="flex-col gap-2 sm:flex-col sm:items-stretch">
+          {/* Primary action row — Mark Done is the everyday path. */}
+          {!event.fulfilled_session_id && !planAlreadyDone ? (
+            <div className="flex flex-wrap gap-2">
+              <Button onClick={markDone} disabled={busy} className="flex-1">
+                <Check className="h-4 w-4" />
+                Mark done
+              </Button>
+              {isOpenScheduled ? (
+                <>
+                  <Button
+                    variant="outline"
+                    disabled={busy}
+                    onClick={() => setStatus('no_show', 'Marked no-show')}
+                  >
+                    <CircleSlash className="h-4 w-4" />
+                    No-show
+                  </Button>
+                  <Button variant="outline" disabled={busy} onClick={remind}>
+                    <Bell className="h-4 w-4" />
+                    Remind
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    disabled={busy}
+                    onClick={() => setStatus('cancelled', 'Cancelled')}
+                  >
+                    <X className="h-4 w-4" />
+                    Cancel
+                  </Button>
+                </>
+              ) : null}
+            </div>
+          ) : (
+            <div className="flex justify-end">
+              <Button variant="outline" onClick={onClose}>
+                Close
+              </Button>
+            </div>
+          )}
 
-          {/* Scheduled-only quick actions */}
-          {isOpenScheduled ? (
-            <>
-              <Button
-                variant="outline"
-                disabled={busy}
-                onClick={() => setStatus('no_show', 'Marked no-show')}
-              >
-                <CircleSlash className="h-4 w-4" />
-                No-show
-              </Button>
-              <Button variant="outline" disabled={busy} onClick={remind}>
-                <Bell className="h-4 w-4" />
-                Remind
-              </Button>
-              <Button
-                variant="ghost"
-                disabled={busy}
-                onClick={() => setStatus('cancelled', 'Cancelled')}
-              >
-                <X className="h-4 w-4" />
-                Cancel
-              </Button>
-            </>
-          ) : null}
-
-          {/* Closed (already logged or finalized) — just close */}
-          {!isOpenScheduled && event.fulfilled_session_id ? (
-            <Button variant="outline" onClick={onClose}>
-              Close
-            </Button>
+          {/* Optional — only when the trainer wants AI insights. */}
+          {!event.fulfilled_session_id && !planAlreadyDone ? (
+            <button
+              type="button"
+              onClick={logSession}
+              disabled={busy}
+              className="text-xs text-muted-foreground underline-offset-4 hover:underline disabled:opacity-50"
+            >
+              or log full session details (runs the analysis pipeline) →
+            </button>
           ) : null}
         </DialogFooter>
       </DialogContent>
