@@ -1,0 +1,39 @@
+import { apiClient } from '@/lib/api';
+import type {
+  Student,
+  StudentCreateRequest,
+  StudentDetailResponse,
+  StudentHistoryResponse,
+  StudentUpdateRequest,
+} from '@/lib/types';
+
+export const studentsApi = {
+  list: () => apiClient.get<Student[]>('/api/students'),
+
+  create: (payload: StudentCreateRequest) =>
+    apiClient.post<Student>('/api/students', payload),
+
+  get: (studentId: string) =>
+    apiClient.get<StudentDetailResponse>(
+      `/api/students/${encodeURIComponent(studentId)}`,
+    ),
+
+  update: (studentId: string, payload: StudentUpdateRequest) =>
+    apiClient.patch<Student>(
+      `/api/students/${encodeURIComponent(studentId)}`,
+      payload,
+    ),
+
+  history: (
+    studentId: string,
+    params?: { limit?: number; cursor?: string },
+  ) => {
+    const search = new URLSearchParams();
+    if (params?.limit) search.set('limit', String(params.limit));
+    if (params?.cursor) search.set('cursor', params.cursor);
+    const qs = search.toString();
+    return apiClient.get<StudentHistoryResponse>(
+      `/api/students/${encodeURIComponent(studentId)}/history${qs ? `?${qs}` : ''}`,
+    );
+  },
+};
