@@ -9,6 +9,7 @@ import {
   ChevronRight,
   CircleSlash,
   Dumbbell,
+  Trash2,
   X,
 } from 'lucide-react';
 import { toast } from 'sonner';
@@ -35,6 +36,7 @@ import {
   type PlannedEvent,
   type ScheduledEvent,
 } from '@/lib/api/calendar';
+import { plansApi } from '@/lib/api/plans';
 import { describeApiError } from '@/lib/api';
 import type { Student } from '@/lib/types';
 
@@ -421,6 +423,28 @@ function EventDetailDialog({
     }
   }
 
+  async function deleteEvent() {
+    if (!event) return;
+    const kindLabel = event.kind === 'planned' ? 'plan item' : 'session';
+    if (!window.confirm(`Delete this ${kindLabel}? This cannot be undone.`)) {
+      return;
+    }
+    setBusy(true);
+    try {
+      if (event.kind === 'scheduled') {
+        await billingApi.deleteSchedule(event.id);
+      } else {
+        await plansApi.deletePlannedSession(event.id);
+      }
+      toast.success('Deleted');
+      onChanged();
+    } catch (err) {
+      toast.error(describeApiError(err));
+    } finally {
+      setBusy(false);
+    }
+  }
+
   function logSession() {
     // Optional path — full log form runs the AI pipeline.
     const dateOnly = event!.starts_at.slice(0, 10);
@@ -553,6 +577,20 @@ function EventDetailDialog({
               or log full session details (runs the analysis pipeline) →
             </button>
           ) : null}
+
+          {/* Always-available destructive action — bottom row. */}
+          <div className="flex justify-end">
+            <Button
+              variant="ghost"
+              size="sm"
+              disabled={busy}
+              onClick={deleteEvent}
+              className="text-rose-300 hover:bg-rose-500/10 hover:text-rose-200"
+            >
+              <Trash2 className="h-4 w-4" />
+              Delete
+            </Button>
+          </div>
         </DialogFooter>
       </DialogContent>
     </Dialog>

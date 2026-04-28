@@ -246,6 +246,10 @@ export const billingApi = {
       `/api/services/${encodeURIComponent(serviceId)}`,
       payload,
     ),
+  deleteService: (serviceId: string) =>
+    apiClient.delete<{ deleted: boolean; id: string }>(
+      `/api/services/${encodeURIComponent(serviceId)}`,
+    ),
 
   // packages
   listAllPackages: (status?: PackageStatus) =>
@@ -260,6 +264,10 @@ export const billingApi = {
     apiClient.post<PackageRow>(
       `/api/students/${encodeURIComponent(studentId)}/packages`,
       payload,
+    ),
+  deletePackage: (packageId: string) =>
+    apiClient.delete<{ deleted: boolean; id: string }>(
+      `/api/packages/${encodeURIComponent(packageId)}`,
     ),
   recordManualPayment: (
     packageId: string,
@@ -321,6 +329,10 @@ export const billingApi = {
     apiClient.patch<ScheduledSessionRow>(
       `/api/scheduled-sessions/${encodeURIComponent(scheduleId)}`,
       payload,
+    ),
+  deleteSchedule: (scheduleId: string) =>
+    apiClient.delete<{ deleted: boolean; id: string }>(
+      `/api/scheduled-sessions/${encodeURIComponent(scheduleId)}`,
     ),
   remindStudent: (scheduleId: string, toEmail?: string) =>
     apiClient.post<SendNotificationResult>(

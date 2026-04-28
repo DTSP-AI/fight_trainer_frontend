@@ -2,7 +2,8 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { Mail, Plus } from 'lucide-react';
+import { useRouter } from 'next/navigation';
+import { Mail, Plus, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -19,9 +20,37 @@ interface StudentDetailProps {
 }
 
 export function StudentDetail({ studentId }: StudentDetailProps) {
+  const router = useRouter();
   const [data, setData] = useState<StudentDetailResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [resending, setResending] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+
+  async function deleteStudent() {
+    const name = data?.student.full_name ?? 'this student';
+    const confirm1 = window.confirm(
+      `Delete ${name}? This will cascade-delete every session, package, ` +
+        `invoice, plan, and clip delivery for them. This is irreversible.`,
+    );
+    if (!confirm1) return;
+    const typed = window.prompt(
+      `Type the student's full name to confirm: ${name}`,
+    );
+    if ((typed ?? '').trim() !== name) {
+      toast.error('Name did not match — delete cancelled.');
+      return;
+    }
+    setDeleting(true);
+    try {
+      await studentsApi.delete(studentId);
+      toast.success(`${name} deleted.`);
+      router.push('/trainer/students');
+    } catch (err) {
+      toast.error(describeApiError(err));
+    } finally {
+      setDeleting(false);
+    }
+  }
 
   async function resendInvite() {
     setResending(true);
@@ -209,6 +238,29 @@ export function StudentDetail({ studentId }: StudentDetailProps) {
           </CardContent>
         </Card>
       </div>
+
+      <Card className="border-rose-500/40">
+        <CardHeader>
+          <CardTitle className="text-base text-rose-300">
+            Danger zone
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="flex flex-wrap items-center justify-between gap-3 p-5 pt-0">
+          <p className="text-xs text-muted-foreground">
+            Deleting {student.full_name} cascades every session, package,
+            invoice, plan, and clip delivery for them. This cannot be undone.
+          </p>
+          <Button
+            variant="outline"
+            disabled={deleting}
+            onClick={deleteStudent}
+            className="border-rose-500/40 text-rose-300 hover:bg-rose-500/10 hover:text-rose-200"
+          >
+            <Trash2 className="h-4 w-4" />
+            {deleting ? 'Deleting…' : 'Delete student'}
+          </Button>
+        </CardContent>
+      </Card>
     </div>
   );
 }

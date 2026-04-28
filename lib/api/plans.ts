@@ -25,4 +25,14 @@ export const plansApi = {
       `/api/plan-adjustments/${encodeURIComponent(adjustmentId)}`,
       payload,
     ),
+
+  delete: (planId: string) =>
+    apiClient.delete<{ deleted: boolean; id: string }>(
+      `/api/training-plans/${encodeURIComponent(planId)}`,
+    ),
+
+  deletePlannedSession: (plannedId: string) =>
+    apiClient.delete<{ deleted: boolean; id: string }>(
+      `/api/planned-sessions/${encodeURIComponent(plannedId)}`,
+    ),
 };

@@ -32,6 +32,11 @@ export const studentsApi = {
       payload,
     ),
 
+  delete: (studentId: string) =>
+    apiClient.delete<{ deleted: boolean; id: string }>(
+      `/api/students/${encodeURIComponent(studentId)}`,
+    ),
+
   history: (
     studentId: string,
     params?: { limit?: number; cursor?: string },

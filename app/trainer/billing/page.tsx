@@ -11,6 +11,7 @@ import {
   Layers,
   List,
   Plus,
+  Trash2,
   X,
 } from 'lucide-react';
 import { toast } from 'sonner';
@@ -444,6 +445,21 @@ function ServiceRowItem({
       setBusy(false);
     }
   }
+  async function deleteService() {
+    if (!window.confirm(`Delete service "${s.name}"? This cannot be undone.`)) {
+      return;
+    }
+    setBusy(true);
+    try {
+      await billingApi.deleteService(s.id);
+      toast.success('Service deleted');
+      onChanged();
+    } catch (err) {
+      toast.error(describeApiError(err));
+    } finally {
+      setBusy(false);
+    }
+  }
   return (
     <div className="flex items-center justify-between rounded-md border border-border bg-background/40 p-3">
       <div className="min-w-0">
@@ -460,9 +476,21 @@ function ServiceRowItem({
           {fmtCents(s.default_price_cents)}
         </div>
       </div>
-      <Button size="sm" variant="ghost" disabled={busy} onClick={toggleActive}>
-        {s.is_active ? 'Archive' : 'Activate'}
-      </Button>
+      <div className="flex items-center gap-1">
+        <Button size="sm" variant="ghost" disabled={busy} onClick={toggleActive}>
+          {s.is_active ? 'Archive' : 'Activate'}
+        </Button>
+        <Button
+          size="icon"
+          variant="ghost"
+          disabled={busy}
+          onClick={deleteService}
+          className="text-rose-300 hover:bg-rose-500/10 hover:text-rose-200"
+          aria-label="Delete service"
+        >
+          <Trash2 className="h-4 w-4" />
+        </Button>
+      </div>
     </div>
   );
 }
@@ -670,6 +698,27 @@ function PackageRowItem({
     }
   }
 
+  async function deletePackage() {
+    const studentName = student?.full_name ?? 'this student';
+    if (
+      !window.confirm(
+        `Delete this package for ${studentName}? Payment history attached to it will also be removed. This cannot be undone.`,
+      )
+    ) {
+      return;
+    }
+    setBusy(true);
+    try {
+      await billingApi.deletePackage(p.id);
+      toast.success('Package deleted');
+      onChanged();
+    } catch (err) {
+      toast.error(describeApiError(err));
+    } finally {
+      setBusy(false);
+    }
+  }
+
   const remaining = p.sessions_remaining;
   const total = p.total_sessions;
   const paid = p.payment_status === 'paid';
@@ -703,6 +752,16 @@ function PackageRowItem({
           Mark paid
         </Button>
       ) : null}
+      <Button
+        size="icon"
+        variant="ghost"
+        disabled={busy}
+        onClick={deletePackage}
+        className="text-rose-300 hover:bg-rose-500/10 hover:text-rose-200"
+        aria-label="Delete package"
+      >
+        <Trash2 className="h-4 w-4" />
+      </Button>
     </div>
   );
 }
@@ -1113,6 +1172,20 @@ function SessionRow({
     }
   }
 
+  async function deleteRow() {
+    if (!window.confirm('Delete this session? This cannot be undone.')) return;
+    setBusy(true);
+    try {
+      await billingApi.deleteSchedule(s.id);
+      toast.success('Session deleted');
+      onChanged();
+    } catch (err) {
+      toast.error(describeApiError(err));
+    } finally {
+      setBusy(false);
+    }
+  }
+
   const variant = SCHEDULE_STATUS_VARIANTS[s.status] ?? 'secondary';
   const isOpen = s.status === 'scheduled' || s.status === 'confirmed';
 
@@ -1177,8 +1250,30 @@ function SessionRow({
             <X className="h-4 w-4" />
             Cancel
           </Button>
+          <Button
+            size="icon"
+            variant="ghost"
+            disabled={busy}
+            onClick={deleteRow}
+            className="text-rose-300 hover:bg-rose-500/10 hover:text-rose-200"
+            aria-label="Delete session"
+          >
+            <Trash2 className="h-4 w-4" />
+          </Button>
         </>
-      ) : null}
+      ) : (
+        // Closed rows (completed/no-show/cancelled) still get delete.
+        <Button
+          size="icon"
+          variant="ghost"
+          disabled={busy}
+          onClick={deleteRow}
+          className="text-rose-300 hover:bg-rose-500/10 hover:text-rose-200"
+          aria-label="Delete session"
+        >
+          <Trash2 className="h-4 w-4" />
+        </Button>
+      )}
     </div>
   );
 }

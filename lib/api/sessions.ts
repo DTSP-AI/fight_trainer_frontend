@@ -21,6 +21,11 @@ export const sessionsApi = {
       payload,
     ),
 
+  delete: (sessionId: string) =>
+    apiClient.delete<{ deleted: boolean; id: string }>(
+      `/api/sessions/${encodeURIComponent(sessionId)}`,
+    ),
+
   /**
    * Manifest M2 — voice mode seam.
    * Backend returns 501 in v1. The VoiceModeBadge component handles this
