@@ -56,6 +56,23 @@ export interface ServiceCreateRequest {
   default_price_cents: number;
 }
 
+export interface ServiceUpdateRequest {
+  name?: string;
+  description?: string;
+  sport?: Sport;
+  default_duration_minutes?: number;
+  default_price_cents?: number;
+  is_active?: boolean;
+}
+
+export interface ScheduledSessionUpdateRequest {
+  scheduled_for?: string;
+  duration_minutes?: number;
+  status?: ScheduleStatus;
+  notes?: string;
+  cancellation_reason?: string;
+}
+
 // ============================================================================
 // Student packages
 // ============================================================================
@@ -224,8 +241,17 @@ export const billingApi = {
     ),
   createService: (payload: ServiceCreateRequest) =>
     apiClient.post<ServiceRow>('/api/services', payload),
+  updateService: (serviceId: string, payload: ServiceUpdateRequest) =>
+    apiClient.patch<ServiceRow>(
+      `/api/services/${encodeURIComponent(serviceId)}`,
+      payload,
+    ),
 
   // packages
+  listAllPackages: (status?: PackageStatus) =>
+    apiClient.get<PackageRow[]>(
+      `/api/packages${status ? `?status=${status}` : ''}`,
+    ),
   listPackages: (studentId: string) =>
     apiClient.get<PackageRow[]>(
       `/api/students/${encodeURIComponent(studentId)}/packages`,
@@ -288,6 +314,14 @@ export const billingApi = {
   },
   scheduleSession: (payload: ScheduledSessionCreateRequest) =>
     apiClient.post<ScheduledSessionRow>('/api/scheduled-sessions', payload),
+  updateSchedule: (
+    scheduleId: string,
+    payload: ScheduledSessionUpdateRequest,
+  ) =>
+    apiClient.patch<ScheduledSessionRow>(
+      `/api/scheduled-sessions/${encodeURIComponent(scheduleId)}`,
+      payload,
+    ),
   remindStudent: (scheduleId: string, toEmail?: string) =>
     apiClient.post<SendNotificationResult>(
       `/api/scheduled-sessions/${encodeURIComponent(scheduleId)}/remind`,
