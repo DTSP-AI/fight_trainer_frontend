@@ -111,13 +111,14 @@ export function ClipCard({ item }: ClipCardProps) {
 
     function onMessage(e: MessageEvent) {
       if (typeof e.data !== 'string') return;
-      let payload: { event?: string; info?: unknown } | null = null;
+      let raw: unknown;
       try {
-        payload = JSON.parse(e.data) as typeof payload;
+        raw = JSON.parse(e.data);
       } catch {
         return;
       }
-      if (!payload || typeof payload !== 'object') return;
+      if (!raw || typeof raw !== 'object') return;
+      const payload = raw as { event?: string; info?: unknown };
 
       // YT sends event:'infoDelivery' with info.playerState + info.currentTime.
       if (payload.event === 'infoDelivery' && payload.info && typeof payload.info === 'object') {

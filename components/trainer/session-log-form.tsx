@@ -26,25 +26,22 @@ import type { Student } from '@/lib/types';
 const schema = z.object({
   student_id: z.string().min(1, 'Pick a student'),
   session_date: z.string().min(1, 'Required'),
-  duration_minutes: z
-    .string()
-    .optional()
-    .transform((v) => (v ? Number(v) : undefined)),
+  duration_minutes: z.string().optional(),
   notes: z.string().optional(),
   coaching_cues: z.string().optional(),
   voice_transcript: z.string().optional(),
-  sparring_rounds_count: z
-    .string()
-    .optional()
-    .transform((v) => (v ? Number(v) : undefined)),
-  student_self_rating: z
-    .string()
-    .optional()
-    .transform((v) => (v ? Number(v) : undefined)),
+  sparring_rounds_count: z.string().optional(),
+  student_self_rating: z.string().optional(),
 });
 
-type FormValues = z.input<typeof schema>;
-type SubmitValues = z.output<typeof schema>;
+type FormValues = z.infer<typeof schema>;
+type SubmitValues = FormValues;
+
+function toNumOrNull(v: string | undefined): number | null {
+  if (v === undefined || v === '') return null;
+  const n = Number(v);
+  return Number.isFinite(n) ? n : null;
+}
 
 const today = () => new Date().toISOString().slice(0, 10);
 
@@ -62,7 +59,7 @@ export function SessionLogForm() {
     setValue,
     watch,
     formState: { errors },
-  } = useForm<FormValues, unknown, SubmitValues>({
+  } = useForm<FormValues>({
     resolver: zodResolver(schema),
     defaultValues: {
       student_id: initialStudent,
@@ -94,21 +91,12 @@ export function SessionLogForm() {
       const created = await sessionsApi.create({
         student_id: values.student_id,
         session_date: values.session_date,
-        duration_minutes:
-          values.duration_minutes != null && Number.isFinite(values.duration_minutes)
-            ? values.duration_minutes
-            : null,
+        duration_minutes: toNumOrNull(values.duration_minutes),
         notes: values.notes || null,
         coaching_cues: values.coaching_cues || null,
         voice_transcript: values.voice_transcript || null,
-        sparring_rounds_count:
-          values.sparring_rounds_count != null && Number.isFinite(values.sparring_rounds_count)
-            ? values.sparring_rounds_count
-            : null,
-        student_self_rating:
-          values.student_self_rating != null && Number.isFinite(values.student_self_rating)
-            ? values.student_self_rating
-            : null,
+        sparring_rounds_count: toNumOrNull(values.sparring_rounds_count),
+        student_self_rating: toNumOrNull(values.student_self_rating),
         mode: 'text',
       });
       toast.success('Session logged. Pipeline kicked off.', {
