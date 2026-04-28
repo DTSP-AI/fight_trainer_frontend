@@ -114,6 +114,23 @@ export interface StudentCreateRequest {
   invite_email?: string | null;
 }
 
+export interface InviteDelivery {
+  status: 'sent' | 'skipped' | 'failed';
+  notification_id?: string | null;
+  external_id?: string | null;
+  error?: string | null;
+}
+
+export interface StudentCreateResponse extends Student {
+  invite_link?: string;
+  invite_delivery?: InviteDelivery;
+}
+
+export interface ResendInviteResponse {
+  invite_link: string;
+  delivery: InviteDelivery;
+}
+
 export interface StudentUpdateRequest {
   full_name?: string;
   primary_sport?: Sport;

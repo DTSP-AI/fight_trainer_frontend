@@ -2,7 +2,8 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { Plus } from 'lucide-react';
+import { Mail, Plus } from 'lucide-react';
+import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -20,6 +21,31 @@ interface StudentDetailProps {
 export function StudentDetail({ studentId }: StudentDetailProps) {
   const [data, setData] = useState<StudentDetailResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [resending, setResending] = useState(false);
+
+  async function resendInvite() {
+    setResending(true);
+    try {
+      const res = await studentsApi.resendInvite(studentId);
+      if (res.delivery.status === 'sent') {
+        toast.success('Invite resent.');
+      } else if (res.delivery.status === 'skipped') {
+        await navigator.clipboard
+          .writeText(res.invite_link)
+          .catch(() => undefined);
+        toast(
+          'Email service not configured — invite link copied to clipboard.',
+          { duration: 6000 },
+        );
+      } else {
+        toast.error(`Resend failed: ${res.delivery.error ?? 'unknown'}`);
+      }
+    } catch (err) {
+      toast.error(describeApiError(err));
+    } finally {
+      setResending(false);
+    }
+  }
 
   useEffect(() => {
     let cancelled = false;
@@ -67,7 +93,7 @@ export function StudentDetail({ studentId }: StudentDetailProps) {
             <span>Started {formatDate(student.started_training_at) || '—'}</span>
           </div>
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
           <Button asChild>
             <Link href={`/trainer/sessions/new?studentId=${student.id}`}>
               <Plus className="h-4 w-4" />
@@ -79,8 +105,27 @@ export function StudentDetail({ studentId }: StudentDetailProps) {
               Edit plan
             </Link>
           </Button>
+          {student.invite_email && student.invite_status === 'pending' ? (
+            <Button
+              variant="outline"
+              onClick={resendInvite}
+              disabled={resending}
+            >
+              <Mail className="h-4 w-4" />
+              {resending ? 'Sending…' : 'Resend invite'}
+            </Button>
+          ) : null}
         </div>
       </div>
+
+      {student.invite_email && student.invite_status === 'pending' ? (
+        <p className="rounded-md border border-amber-500/40 bg-amber-500/10 p-3 text-sm">
+          <strong>Invite pending</strong> — emailed{' '}
+          <span className="font-mono">{student.invite_email}</span>. If they
+          didn't get it, hit "Resend invite" above. (Falls back to copying the
+          link if Resend isn't configured.)
+        </p>
+      ) : null}
 
       {student.notes ? (
         <Card>

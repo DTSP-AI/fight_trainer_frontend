@@ -1,7 +1,9 @@
 import { apiClient } from '@/lib/api';
 import type {
+  ResendInviteResponse,
   Student,
   StudentCreateRequest,
+  StudentCreateResponse,
   StudentDetailResponse,
   StudentHistoryResponse,
   StudentUpdateRequest,
@@ -11,7 +13,13 @@ export const studentsApi = {
   list: () => apiClient.get<Student[]>('/api/students'),
 
   create: (payload: StudentCreateRequest) =>
-    apiClient.post<Student>('/api/students', payload),
+    apiClient.post<StudentCreateResponse>('/api/students', payload),
+
+  resendInvite: (studentId: string) =>
+    apiClient.post<ResendInviteResponse>(
+      `/api/students/${encodeURIComponent(studentId)}/resend-invite`,
+      {},
+    ),
 
   get: (studentId: string) =>
     apiClient.get<StudentDetailResponse>(
