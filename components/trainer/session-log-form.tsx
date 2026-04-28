@@ -49,6 +49,9 @@ export function SessionLogForm() {
   const router = useRouter();
   const params = useSearchParams();
   const initialStudent = params.get('studentId') ?? '';
+  const initialDate = params.get('date') ?? '';
+  const scheduledSessionId = params.get('scheduledSessionId');
+  const plannedSessionId = params.get('plannedSessionId');
 
   const [students, setStudents] = useState<Student[] | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -63,7 +66,7 @@ export function SessionLogForm() {
     resolver: zodResolver(schema),
     defaultValues: {
       student_id: initialStudent,
-      session_date: today(),
+      session_date: initialDate || today(),
       notes: '',
       coaching_cues: '',
       voice_transcript: '',
@@ -98,6 +101,8 @@ export function SessionLogForm() {
         sparring_rounds_count: toNumOrNull(values.sparring_rounds_count),
         student_self_rating: toNumOrNull(values.student_self_rating),
         mode: 'text',
+        scheduled_session_id: scheduledSessionId || null,
+        planned_session_id: plannedSessionId || null,
       });
       toast.success('Session logged. Pipeline kicked off.', {
         description: 'Clip delivery typically lands within ~90 seconds.',
@@ -118,6 +123,12 @@ export function SessionLogForm() {
     >
       {/* Manifest M2 — voice mode seam visible on the session-log surface. */}
       <VoiceModeBadge />
+
+      {scheduledSessionId || plannedSessionId ? (
+        <p className="rounded-md border border-emerald-500/40 bg-emerald-500/10 p-3 text-xs text-emerald-100">
+          Logging this will mark the calendar event as <strong>completed</strong>.
+        </p>
+      ) : null}
 
       <div className="grid gap-4 md:grid-cols-2">
         <div className="grid gap-2">

@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
+  AlertTriangle,
   Bell,
   CalendarDays,
   CalendarPlus,
@@ -29,6 +30,7 @@ import {
   type ServiceRow,
   type Sport,
 } from '@/lib/api/billing';
+import { calendarApi, type CalendarEvent } from '@/lib/api/calendar';
 import { studentsApi } from '@/lib/api/students';
 import { describeApiError } from '@/lib/api';
 import type { Student } from '@/lib/types';
@@ -87,6 +89,9 @@ export default function TrainerBillingHubPage() {
   const [services, setServices] = useState<ServiceRow[]>([]);
   const [packages, setPackages] = useState<PackageRow[]>([]);
   const [sessions, setSessions] = useState<ScheduledSessionRow[]>([]);
+  const [calendarEvents, setCalendarEvents] = useState<CalendarEvent[]>([]);
+  const [missed, setMissed] = useState<CalendarEvent[]>([]);
+  const [sweeping, setSweeping] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [scheduleFilter, setScheduleFilter] =
     useState<'upcoming' | 'past' | 'all'>('upcoming');
@@ -100,20 +105,53 @@ export default function TrainerBillingHubPage() {
 
   const refresh = useCallback(async () => {
     try {
-      const [stu, svcs, pkgs, sched] = await Promise.all([
+      // Wide window — current month ± 60 days for the calendar feed.
+      const now = new Date();
+      const from = new Date(now);
+      from.setDate(from.getDate() - 60);
+      const to = new Date(now);
+      to.setDate(to.getDate() + 60);
+
+      const [stu, svcs, pkgs, sched, evs, miss] = await Promise.all([
         studentsApi.list(),
         billingApi.listServices(true),
         billingApi.listAllPackages(),
         billingApi.listScheduled(),
+        calendarApi.events({
+          from_date: from.toISOString(),
+          to_date: to.toISOString(),
+        }),
+        calendarApi.missed(),
       ]);
       setStudents(stu);
       setServices(svcs);
       setPackages(pkgs);
       setSessions(sched);
+      setCalendarEvents(evs);
+      setMissed(miss);
     } catch (err) {
       setError(describeApiError(err));
     }
   }, []);
+
+  async function sweepMissed() {
+    setSweeping(true);
+    try {
+      const res = await calendarApi.sweepMissed();
+      toast.success(
+        `Marked ${res.swept_scheduled} no-show${
+          res.swept_scheduled === 1 ? '' : 's'
+        }, sent ${res.notifications_sent} notification${
+          res.notifications_sent === 1 ? '' : 's'
+        }.`,
+      );
+      void refresh();
+    } catch (err) {
+      toast.error(describeApiError(err));
+    } finally {
+      setSweeping(false);
+    }
+  }
 
   useEffect(() => {
     void refresh();
@@ -159,6 +197,31 @@ export default function TrainerBillingHubPage() {
           you go.
         </p>
       </div>
+
+      {missed.length > 0 ? (
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-amber-500/40 bg-amber-500/10 p-4">
+          <div className="flex items-start gap-3">
+            <AlertTriangle className="mt-0.5 h-5 w-5 text-amber-300" />
+            <div>
+              <div className="text-sm font-semibold text-amber-100">
+                {missed.length} session{missed.length === 1 ? '' : 's'} past
+                their time and unlogged
+              </div>
+              <p className="mt-0.5 text-xs text-amber-100/80">
+                Mark each one Completed via the calendar, or sweep them all
+                as no-show and send the missed-session email.
+              </p>
+            </div>
+          </div>
+          <Button
+            variant="outline"
+            disabled={sweeping}
+            onClick={sweepMissed}
+          >
+            {sweeping ? 'Sweeping…' : 'Mark all no-show + notify'}
+          </Button>
+        </div>
+      ) : null}
 
       {/* ───────────────── Services Catalog ───────────────── */}
       <section className="space-y-3">
@@ -232,7 +295,7 @@ export default function TrainerBillingHubPage() {
           <Card>
             <CardContent className="py-4">
               <SessionsCalendar
-                sessions={sessions}
+                events={calendarEvents}
                 studentMap={studentMap}
                 serviceMap={serviceMap}
                 packageMap={packageMap}

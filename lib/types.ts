@@ -177,6 +177,10 @@ export interface SessionCreateRequest {
   sparring_rounds_count?: number | null;
   student_self_rating?: number | null;
   mode?: SessionMode;
+  // Calendar linkage — set when logging from a calendar event so the
+  // backend marks the source row fulfilled.
+  scheduled_session_id?: string | null;
+  planned_session_id?: string | null;
 }
 
 export interface SessionCreateResponse {

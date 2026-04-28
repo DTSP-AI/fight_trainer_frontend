@@ -1,12 +1,14 @@
 'use client';
 
 import { useMemo, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import {
   Bell,
   Check,
   ChevronLeft,
   ChevronRight,
   CircleSlash,
+  Dumbbell,
   X,
 } from 'lucide-react';
 import { toast } from 'sonner';
@@ -24,31 +26,25 @@ import { cn } from '@/lib/utils';
 import {
   billingApi,
   type PackageRow,
-  type ScheduledSessionRow,
   type ScheduleStatus,
   type ServiceRow,
 } from '@/lib/api/billing';
+import type {
+  CalendarEvent,
+  PlannedEvent,
+  ScheduledEvent,
+} from '@/lib/api/calendar';
 import { describeApiError } from '@/lib/api';
 import type { Student } from '@/lib/types';
 
 // ============================================================================
-// Date helpers (no library — native Date is enough for a month grid)
+// Date helpers — native Date, no library
 // ============================================================================
 
 const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'] as const;
 const MONTH_NAMES = [
-  'January',
-  'February',
-  'March',
-  'April',
-  'May',
-  'June',
-  'July',
-  'August',
-  'September',
-  'October',
-  'November',
-  'December',
+  'January', 'February', 'March', 'April', 'May', 'June',
+  'July', 'August', 'September', 'October', 'November', 'December',
 ];
 
 function startOfMonth(d: Date): Date {
@@ -68,18 +64,15 @@ function isSameDay(a: Date, b: Date): boolean {
 }
 
 function localDateKey(d: Date): string {
-  // YYYY-MM-DD in local time — matches the cell key we group by.
   const yyyy = d.getFullYear();
   const mm = String(d.getMonth() + 1).padStart(2, '0');
   const dd = String(d.getDate()).padStart(2, '0');
   return `${yyyy}-${mm}-${dd}`;
 }
 
-/** 42-cell month grid (always 6 weeks). Includes leading days from the
- *  previous month and trailing days from the next so each row has 7 cells. */
 function buildMonthGrid(monthAnchor: Date): Date[] {
   const start = startOfMonth(monthAnchor);
-  const offset = start.getDay(); // 0=Sun
+  const offset = start.getDay();
   const gridStart = new Date(start);
   gridStart.setDate(1 - offset);
   const out: Date[] = [];
@@ -124,10 +117,10 @@ function fmtCents(c: number): string {
 }
 
 // ============================================================================
-// Status colors
+// Visual tokens
 // ============================================================================
 
-const CHIP_TONES: Record<ScheduleStatus, string> = {
+const SCHEDULED_TONES: Record<ScheduleStatus, string> = {
   scheduled:
     'border-sky-500/50 bg-sky-500/15 text-sky-100 hover:bg-sky-500/25',
   confirmed:
@@ -140,12 +133,32 @@ const CHIP_TONES: Record<ScheduleStatus, string> = {
     'border-rose-500/50 bg-rose-500/15 text-rose-200 line-through hover:bg-rose-500/25',
 };
 
+const PLAN_TONE_OPEN =
+  'border border-dashed border-violet-400/60 bg-violet-500/10 text-violet-100 hover:bg-violet-500/20';
+const PLAN_TONE_DONE =
+  'border border-dashed border-emerald-400/60 bg-emerald-500/10 text-emerald-100';
+
+function eventClass(ev: CalendarEvent): string {
+  if (ev.kind === 'planned') {
+    return ev.fulfilled_session_id ? PLAN_TONE_DONE : PLAN_TONE_OPEN;
+  }
+  return SCHEDULED_TONES[ev.status ?? 'scheduled'];
+}
+
+function eventLabel(ev: CalendarEvent, student?: Student): string {
+  const name = student?.full_name ?? '(unknown)';
+  if (ev.kind === 'planned') {
+    return `${ev.session_type ?? 'plan'} · ${name}`;
+  }
+  return `${fmtTime(ev.starts_at)} ${name}`;
+}
+
 // ============================================================================
 // SessionsCalendar
 // ============================================================================
 
 interface Props {
-  sessions: ScheduledSessionRow[];
+  events: CalendarEvent[];
   studentMap: Map<string, Student>;
   serviceMap: Map<string, ServiceRow>;
   packageMap: Map<string, PackageRow>;
@@ -156,7 +169,7 @@ interface Props {
 }
 
 export function SessionsCalendar({
-  sessions,
+  events,
   studentMap,
   serviceMap,
   packageMap,
@@ -165,36 +178,31 @@ export function SessionsCalendar({
 }: Props) {
   const today = useMemo(() => new Date(), []);
   const [cursor, setCursor] = useState<Date>(() => startOfMonth(today));
-  const [selected, setSelected] = useState<ScheduledSessionRow | null>(null);
+  const [selected, setSelected] = useState<CalendarEvent | null>(null);
 
   const grid = useMemo(() => buildMonthGrid(cursor), [cursor]);
 
-  // Group by local YYYY-MM-DD.
   const byDate = useMemo(() => {
-    const m = new Map<string, ScheduledSessionRow[]>();
-    for (const s of sessions) {
-      const key = localDateKey(new Date(s.scheduled_for));
+    const m = new Map<string, CalendarEvent[]>();
+    for (const ev of events) {
+      const key = localDateKey(new Date(ev.starts_at));
       const arr = m.get(key) ?? [];
-      arr.push(s);
+      arr.push(ev);
       m.set(key, arr);
     }
-    // Sort each day's events by time.
     for (const arr of m.values()) {
       arr.sort(
         (a, b) =>
-          new Date(a.scheduled_for).getTime() -
-          new Date(b.scheduled_for).getTime(),
+          new Date(a.starts_at).getTime() - new Date(b.starts_at).getTime(),
       );
     }
     return m;
-  }, [sessions]);
+  }, [events]);
 
   function handleDayClick(d: Date) {
     if (!onPickDay) return;
-    // Default to 12:00 PM local on the picked day.
     const dt = new Date(d);
     dt.setHours(12, 0, 0, 0);
-    // Format as the value a <input type="datetime-local"> wants.
     const yyyy = dt.getFullYear();
     const mm = String(dt.getMonth() + 1).padStart(2, '0');
     const dd = String(dt.getDate()).padStart(2, '0');
@@ -205,7 +213,6 @@ export function SessionsCalendar({
 
   return (
     <div className="space-y-3">
-      {/* ── Header ── */}
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="flex items-center gap-2">
           <Button
@@ -235,25 +242,23 @@ export function SessionsCalendar({
         <h3 className="text-lg font-semibold tracking-tight">
           {MONTH_NAMES[cursor.getMonth()]} {cursor.getFullYear()}
         </h3>
-        <LegendDots />
+        <Legend />
       </div>
 
-      {/* ── Weekday header ── */}
       <div className="grid grid-cols-7 gap-1 text-center text-xs font-medium uppercase tracking-wider text-muted-foreground">
         {WEEKDAYS.map((w) => (
           <div key={w}>{w}</div>
         ))}
       </div>
 
-      {/* ── Month grid ── */}
       <div className="grid grid-cols-7 gap-1">
         {grid.map((d) => {
           const key = localDateKey(d);
           const inMonth = d.getMonth() === cursor.getMonth();
           const isToday = isSameDay(d, today);
-          const events = byDate.get(key) ?? [];
-          const visible = events.slice(0, 3);
-          const overflow = events.length - visible.length;
+          const eventsToday = byDate.get(key) ?? [];
+          const visible = eventsToday.slice(0, 3);
+          const overflow = eventsToday.length - visible.length;
 
           return (
             <div
@@ -274,9 +279,9 @@ export function SessionsCalendar({
                 >
                   {d.getDate()}
                 </span>
-                {events.length > 0 ? (
+                {eventsToday.length > 0 ? (
                   <span className="text-[10px] text-muted-foreground">
-                    {events.length}
+                    {eventsToday.length}
                   </span>
                 ) : null}
               </div>
@@ -285,24 +290,22 @@ export function SessionsCalendar({
                   const stu = studentMap.get(ev.student_id);
                   return (
                     <button
-                      key={ev.id}
+                      key={`${ev.kind}-${ev.id}`}
                       type="button"
                       onClick={(e) => {
                         e.stopPropagation();
                         setSelected(ev);
                       }}
                       className={cn(
-                        'w-full truncate rounded-sm border px-1.5 py-0.5 text-left text-[11px]',
-                        CHIP_TONES[ev.status] ?? CHIP_TONES.scheduled,
+                        'flex w-full items-center gap-1 truncate rounded-sm px-1.5 py-0.5 text-left text-[11px]',
+                        eventClass(ev),
                       )}
-                      title={`${fmtTime(ev.scheduled_for)} · ${
-                        stu?.full_name ?? 'student'
-                      } · ${ev.status}`}
+                      title={eventLabel(ev, stu)}
                     >
-                      <span className="font-mono">
-                        {fmtTime(ev.scheduled_for)}
-                      </span>{' '}
-                      {stu?.full_name ?? '(unknown)'}
+                      {ev.kind === 'planned' ? (
+                        <Dumbbell className="h-3 w-3 shrink-0" />
+                      ) : null}
+                      <span className="truncate">{eventLabel(ev, stu)}</span>
                     </button>
                   );
                 })}
@@ -317,13 +320,16 @@ export function SessionsCalendar({
         })}
       </div>
 
-      {/* ── Event detail dialog ── */}
-      <SessionDetailDialog
-        session={selected}
+      <EventDetailDialog
+        event={selected}
         student={selected ? studentMap.get(selected.student_id) : undefined}
-        service={selected ? serviceMap.get(selected.service_id) : undefined}
+        service={
+          selected?.kind === 'scheduled' && selected.service_id
+            ? serviceMap.get(selected.service_id)
+            : undefined
+        }
         pkg={
-          selected?.package_id
+          selected?.kind === 'scheduled' && selected.package_id
             ? packageMap.get(selected.package_id)
             : undefined
         }
@@ -338,32 +344,37 @@ export function SessionsCalendar({
 }
 
 // ============================================================================
-// Dialog body
+// Event detail dialog — different actions for scheduled vs planned
 // ============================================================================
 
-function SessionDetailDialog({
-  session,
+function EventDetailDialog({
+  event,
   student,
   service,
   pkg,
   onClose,
   onChanged,
 }: {
-  session: ScheduledSessionRow | null;
+  event: CalendarEvent | null;
   student?: Student;
   service?: ServiceRow;
   pkg?: PackageRow;
   onClose: () => void;
   onChanged: () => void;
 }) {
+  const router = useRouter();
   const [busy, setBusy] = useState(false);
-  if (!session) return null;
+
+  if (!event) return null;
+
+  const scheduled = event.kind === 'scheduled' ? (event as ScheduledEvent) : null;
+  const planned = event.kind === 'planned' ? (event as PlannedEvent) : null;
 
   async function setStatus(status: ScheduleStatus, label: string) {
-    if (!session) return;
+    if (!scheduled) return;
     setBusy(true);
     try {
-      await billingApi.updateSchedule(session.id, { status });
+      await billingApi.updateSchedule(scheduled.id, { status });
       toast.success(label);
       onChanged();
     } catch (err) {
@@ -374,10 +385,10 @@ function SessionDetailDialog({
   }
 
   async function remind() {
-    if (!session) return;
+    if (!scheduled) return;
     setBusy(true);
     try {
-      const res = await billingApi.remindStudent(session.id);
+      const res = await billingApi.remindStudent(scheduled.id);
       if (res.status === 'sent') {
         toast.success(`Reminder sent to ${student?.full_name ?? 'student'}`);
       } else if (res.status === 'skipped') {
@@ -395,52 +406,98 @@ function SessionDetailDialog({
     }
   }
 
-  const isOpen = session.status === 'scheduled' || session.status === 'confirmed';
+  function logSession() {
+    // Pre-fill the log form with student + linkage IDs + the event's date.
+    const dateOnly = event!.starts_at.slice(0, 10);
+    const params = new URLSearchParams({
+      studentId: event!.student_id,
+      date: dateOnly,
+    });
+    if (scheduled) params.set('scheduledSessionId', scheduled.id);
+    if (planned) params.set('plannedSessionId', planned.id);
+    router.push(`/trainer/sessions/new?${params.toString()}`);
+  }
+
+  const isOpenScheduled =
+    scheduled && (scheduled.status === 'scheduled' || scheduled.status === 'confirmed');
+  const planAlreadyDone = planned && planned.fulfilled_session_id;
 
   return (
-    <Dialog open={!!session} onOpenChange={(o) => (!o ? onClose() : null)}>
+    <Dialog open={!!event} onOpenChange={(o) => (!o ? onClose() : null)}>
       <DialogContent>
         <DialogHeader>
           <DialogTitle>
             {student?.full_name ?? '(unknown student)'}
           </DialogTitle>
           <DialogDescription>
-            {fmtWhenFull(session.scheduled_for)} · {session.duration_minutes}m
+            {fmtWhenFull(event.starts_at)}
+            {event.duration_minutes ? ` · ${event.duration_minutes}m` : ''}
           </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-2 text-sm">
           <div className="flex flex-wrap items-center gap-2">
-            <Badge variant="secondary" className="capitalize">
-              {session.status.replace('_', ' ')}
-            </Badge>
-            {service ? (
-              <Badge variant="outline">{service.name}</Badge>
+            {scheduled ? (
+              <>
+                <Badge variant="secondary" className="capitalize">
+                  {(scheduled.status ?? 'scheduled').replace('_', ' ')}
+                </Badge>
+                {service ? (
+                  <Badge variant="outline">{service.name}</Badge>
+                ) : null}
+                <Badge variant="outline">
+                  {pkg
+                    ? `Package ${pkg.sessions_remaining}/${pkg.total_sessions}`
+                    : 'Drop-in'}
+                </Badge>
+                {scheduled.price_cents != null ? (
+                  <Badge variant="outline">
+                    {fmtCents(scheduled.price_cents)}
+                  </Badge>
+                ) : null}
+                {scheduled.fulfilled_session_id ? (
+                  <Badge variant="default">Logged</Badge>
+                ) : null}
+              </>
             ) : null}
-            <Badge variant="outline">
-              {pkg
-                ? `Package ${pkg.sessions_remaining}/${pkg.total_sessions}`
-                : 'Drop-in'}
-            </Badge>
-            <Badge variant="outline">{fmtCents(session.price_cents)}</Badge>
+            {planned ? (
+              <>
+                <Badge variant="secondary">Plan item</Badge>
+                {planned.session_type ? (
+                  <Badge variant="outline" className="capitalize">
+                    {planned.session_type}
+                  </Badge>
+                ) : null}
+                {planned.plan_focus ? (
+                  <Badge variant="outline">{planned.plan_focus}</Badge>
+                ) : null}
+                {planAlreadyDone ? (
+                  <Badge variant="default">Logged</Badge>
+                ) : (
+                  <Badge variant="outline">Not yet logged</Badge>
+                )}
+              </>
+            ) : null}
           </div>
-          {session.notes ? (
+          {event.notes ? (
             <p className="rounded-md border border-border bg-background/40 p-3 text-xs italic text-muted-foreground">
-              {session.notes}
+              {event.notes}
             </p>
           ) : null}
         </div>
 
         <DialogFooter className="flex-wrap gap-2">
-          {isOpen ? (
+          {/* Log Session — primary CTA when not yet fulfilled */}
+          {!event.fulfilled_session_id ? (
+            <Button onClick={logSession} disabled={busy}>
+              <Check className="h-4 w-4" />
+              Log session
+            </Button>
+          ) : null}
+
+          {/* Scheduled-only quick actions */}
+          {isOpenScheduled ? (
             <>
-              <Button
-                disabled={busy}
-                onClick={() => setStatus('completed', 'Marked completed')}
-              >
-                <Check className="h-4 w-4" />
-                Completed
-              </Button>
               <Button
                 variant="outline"
                 disabled={busy}
@@ -449,11 +506,7 @@ function SessionDetailDialog({
                 <CircleSlash className="h-4 w-4" />
                 No-show
               </Button>
-              <Button
-                variant="outline"
-                disabled={busy}
-                onClick={remind}
-              >
+              <Button variant="outline" disabled={busy} onClick={remind}>
                 <Bell className="h-4 w-4" />
                 Remind
               </Button>
@@ -466,11 +519,14 @@ function SessionDetailDialog({
                 Cancel
               </Button>
             </>
-          ) : (
+          ) : null}
+
+          {/* Closed (already logged or finalized) — just close */}
+          {!isOpenScheduled && event.fulfilled_session_id ? (
             <Button variant="outline" onClick={onClose}>
               Close
             </Button>
-          )}
+          ) : null}
         </DialogFooter>
       </DialogContent>
     </Dialog>
@@ -481,12 +537,13 @@ function SessionDetailDialog({
 // Legend
 // ============================================================================
 
-function LegendDots() {
+function Legend() {
   const items: Array<{ label: string; cls: string }> = [
     { label: 'Scheduled', cls: 'bg-sky-500' },
-    { label: 'Completed', cls: 'bg-emerald-500' },
+    { label: 'Logged', cls: 'bg-emerald-500' },
     { label: 'No-show', cls: 'bg-amber-500' },
     { label: 'Cancelled', cls: 'bg-rose-500' },
+    { label: 'Plan', cls: 'bg-violet-500' },
   ];
   return (
     <div className="flex flex-wrap items-center gap-3 text-[11px] text-muted-foreground">
