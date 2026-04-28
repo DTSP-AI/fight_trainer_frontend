@@ -4,10 +4,12 @@ import {
   Activity,
   AlertTriangle,
   CalendarDays,
+  CalendarRange,
   Film,
   Library,
   Sparkles,
   Users,
+  Wallet,
 } from 'lucide-react';
 import { AppHeader } from '@/components/common/app-header';
 import { RoleGate } from '@/components/common/role-gate';
@@ -17,6 +19,7 @@ const NAV: SidebarItem[] = [
   { href: '/trainer', label: 'Dashboard', icon: <Activity className="h-4 w-4" /> },
   { href: '/trainer/students', label: 'Students', icon: <Users className="h-4 w-4" /> },
   { href: '/trainer/sessions', label: 'Sessions', icon: <Film className="h-4 w-4" /> },
+  { href: '/trainer/schedule', label: 'Schedule', icon: <CalendarRange className="h-4 w-4" /> },
   { href: '/trainer/plans', label: 'Plans', icon: <CalendarDays className="h-4 w-4" /> },
   { href: '/trainer/library', label: 'Library', icon: <Library className="h-4 w-4" /> },
   { href: '/trainer/analyze', label: 'Analyzer', icon: <Sparkles className="h-4 w-4" /> },
@@ -24,6 +27,11 @@ const NAV: SidebarItem[] = [
     href: '/trainer/inactivity',
     label: 'Inactivity',
     icon: <AlertTriangle className="h-4 w-4" />,
+  },
+  {
+    href: '/trainer/settings/payments',
+    label: 'Payments',
+    icon: <Wallet className="h-4 w-4" />,
   },
 ];
 
