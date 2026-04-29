@@ -8,6 +8,7 @@ import {
   Library,
   Receipt,
   Sparkles,
+  Trophy,
   Users,
   Wallet,
 } from 'lucide-react';
@@ -23,6 +24,7 @@ const NAV: SidebarItem[] = [
   { href: '/trainer/plans', label: 'Plans', icon: <CalendarDays className="h-4 w-4" /> },
   { href: '/trainer/library', label: 'Library', icon: <Library className="h-4 w-4" /> },
   { href: '/trainer/analyze', label: 'Analyzer', icon: <Sparkles className="h-4 w-4" /> },
+  { href: '/trainer/fighters', label: 'Fighter bank', icon: <Trophy className="h-4 w-4" /> },
   {
     href: '/trainer/inactivity',
     label: 'Inactivity',
