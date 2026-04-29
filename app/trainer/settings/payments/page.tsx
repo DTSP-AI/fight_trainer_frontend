@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Textarea } from '@/components/ui/textarea';
+import { AssistedTextarea } from '@/components/common/assisted-textarea';
 import { LoadingState } from '@/components/common/loading-state';
 import { billingApi, type TenantSettings } from '@/lib/api/billing';
 import { describeApiError } from '@/lib/api';
@@ -158,11 +158,12 @@ export default function TrainerPaymentSettingsPage() {
             <CardTitle className="text-lg">Instructions on every invoice</CardTitle>
           </CardHeader>
           <CardContent>
-            <Textarea
+            <AssistedTextarea
               rows={4}
               value={paymentInstructions}
-              onChange={(e) => setPaymentInstructions(e.target.value)}
+              onChange={setPaymentInstructions}
               placeholder="Tap a button below to pay. After you send, your coach confirms in the app and your package activates."
+              assistKind="payment_instructions"
             />
           </CardContent>
         </Card>

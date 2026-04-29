@@ -10,7 +10,7 @@ import { ChevronDown, ChevronUp } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Textarea } from '@/components/ui/textarea';
+import { AssistedTextarea } from '@/components/common/assisted-textarea';
 import {
   Select,
   SelectContent,
@@ -202,21 +202,31 @@ export function SessionLogForm() {
 
           <div className="grid gap-2">
             <Label htmlFor="notes">Notes</Label>
-            <Textarea
+            <AssistedTextarea
               id="notes"
               rows={4}
               placeholder="What we worked. What landed in live. What broke down."
-              {...register('notes')}
+              value={watch('notes') ?? ''}
+              onChange={(v) =>
+                setValue('notes', v, { shouldDirty: true })
+              }
+              assistKind="session_notes"
+              assistStudentId={studentId || null}
             />
           </div>
 
           <div className="grid gap-2">
             <Label htmlFor="coaching_cues">Coaching cues</Label>
-            <Textarea
+            <AssistedTextarea
               id="coaching_cues"
               rows={2}
               placeholder="The 1-3 things you'd repeat in your student's ear."
-              {...register('coaching_cues')}
+              value={watch('coaching_cues') ?? ''}
+              onChange={(v) =>
+                setValue('coaching_cues', v, { shouldDirty: true })
+              }
+              assistKind="coaching_cues"
+              assistStudentId={studentId || null}
             />
           </div>
 
@@ -258,11 +268,16 @@ export function SessionLogForm() {
             <Label htmlFor="voice_transcript">
               Voice transcript (optional)
             </Label>
-            <Textarea
+            <AssistedTextarea
               id="voice_transcript"
               rows={3}
               placeholder="Paste a dictation transcript — the pipeline reads it if present."
-              {...register('voice_transcript')}
+              value={watch('voice_transcript') ?? ''}
+              onChange={(v) =>
+                setValue('voice_transcript', v, { shouldDirty: true })
+              }
+              assistKind="voice_transcript"
+              assistStudentId={studentId || null}
             />
           </div>
         </div>

@@ -10,7 +10,7 @@ import { Check, Copy } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Textarea } from '@/components/ui/textarea';
+import { AssistedTextarea } from '@/components/common/assisted-textarea';
 import {
   Select,
   SelectContent,
@@ -224,11 +224,13 @@ export function StudentForm() {
 
       <div className="grid gap-2">
         <Label htmlFor="notes">Notes</Label>
-        <Textarea
+        <AssistedTextarea
           id="notes"
           rows={4}
           placeholder="Competition prep, injuries, anything that should travel with the student record."
-          {...register('notes')}
+          value={watch('notes') ?? ''}
+          onChange={(v) => setValue('notes', v, { shouldDirty: true })}
+          assistKind="student_notes"
         />
       </div>
 

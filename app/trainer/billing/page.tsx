@@ -19,9 +19,9 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import { EmptyState } from '@/components/common/empty-state';
+import { AssistedTextarea } from '@/components/common/assisted-textarea';
 import { SessionsCalendar } from '@/components/trainer/sessions-calendar';
 import {
   billingApi,
@@ -587,11 +587,12 @@ function NewServiceForm({
       </div>
       <div className="space-y-2">
         <Label htmlFor="svc_desc">Description (optional)</Label>
-        <Textarea
+        <AssistedTextarea
           id="svc_desc"
           rows={2}
           value={description}
-          onChange={(e) => setDescription(e.target.value)}
+          onChange={setDescription}
+          assistKind="service_description"
         />
       </div>
       <div className="flex gap-2">
@@ -1099,11 +1100,13 @@ function ScheduleNewForm({
           </div>
           <div className="space-y-2">
             <Label htmlFor="notes">Notes (optional)</Label>
-            <Textarea
+            <AssistedTextarea
               id="notes"
               rows={2}
               value={notes}
-              onChange={(e) => setNotes(e.target.value)}
+              onChange={setNotes}
+              assistKind="schedule_notes"
+              assistStudentId={studentId || null}
             />
           </div>
           <div className="flex gap-2">
