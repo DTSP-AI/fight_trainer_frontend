@@ -12,6 +12,7 @@ import {
   List,
   Pencil,
   Plus,
+  Sparkle,
   Trash2,
   X,
 } from 'lucide-react';
@@ -35,6 +36,7 @@ import {
 import { calendarApi, type CalendarEvent } from '@/lib/api/calendar';
 import { studentsApi } from '@/lib/api/students';
 import { describeApiError } from '@/lib/api';
+import { cn } from '@/lib/utils';
 import type { Student } from '@/lib/types';
 
 // ============================================================================
@@ -93,6 +95,7 @@ export default function TrainerBillingHubPage() {
   const [sessions, setSessions] = useState<ScheduledSessionRow[]>([]);
   const [calendarEvents, setCalendarEvents] = useState<CalendarEvent[]>([]);
   const [missed, setMissed] = useState<CalendarEvent[]>([]);
+  const [reupPackages, setReupPackages] = useState<PackageRow[]>([]);
   const [sweeping, setSweeping] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [scheduleFilter, setScheduleFilter] =
@@ -114,7 +117,7 @@ export default function TrainerBillingHubPage() {
       const to = new Date(now);
       to.setDate(to.getDate() + 60);
 
-      const [stu, svcs, pkgs, sched, evs, miss] = await Promise.all([
+      const [stu, svcs, pkgs, sched, evs, miss, reup] = await Promise.all([
         studentsApi.list(),
         billingApi.listServices(true),
         billingApi.listAllPackages(),
@@ -124,6 +127,7 @@ export default function TrainerBillingHubPage() {
           to_date: to.toISOString(),
         }),
         calendarApi.missed(),
+        billingApi.listPackagesNeedingReup(3),
       ]);
       setStudents(stu);
       setServices(svcs);
@@ -131,6 +135,7 @@ export default function TrainerBillingHubPage() {
       setSessions(sched);
       setCalendarEvents(evs);
       setMissed(miss);
+      setReupPackages(reup);
     } catch (err) {
       setError(describeApiError(err));
     }
@@ -222,6 +227,37 @@ export default function TrainerBillingHubPage() {
           >
             {sweeping ? 'Sweeping…' : 'Mark all no-show + notify'}
           </Button>
+        </div>
+      ) : null}
+
+      {reupPackages.length > 0 ? (
+        <div className="rounded-md border border-violet-500/40 bg-violet-500/10 p-4">
+          <div className="flex items-start gap-3">
+            <Sparkle className="mt-0.5 h-5 w-5 text-violet-300" />
+            <div className="flex-1">
+              <div className="text-sm font-semibold text-violet-100">
+                Time to re-up — {reupPackages.length} package
+                {reupPackages.length === 1 ? '' : 's'} at 3 or fewer sessions
+              </div>
+              <ul className="mt-2 space-y-1 text-xs text-violet-100/90">
+                {reupPackages.map((p) => {
+                  const stu = (p as PackageRow & {
+                    students?: { full_name?: string } | null;
+                  }).students;
+                  const name =
+                    stu?.full_name ??
+                    studentMap.get(p.student_id)?.full_name ??
+                    '(student)';
+                  return (
+                    <li key={p.id}>
+                      <strong>{name}</strong> · {p.sessions_remaining} of{' '}
+                      {p.total_sessions} left
+                    </li>
+                  );
+                })}
+              </ul>
+            </div>
+          </div>
         </div>
       ) : null}
 
@@ -858,13 +894,29 @@ function PackageRowItem({
   const remaining = p.sessions_remaining;
   const total = p.total_sessions;
   const paid = p.payment_status === 'paid';
+  const lowBalance = p.status === 'active' && remaining <= 3 && remaining > 0;
+  const exhausted = remaining === 0;
 
   return (
-    <div className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-border bg-background/40 p-3">
+    <div
+      className={cn(
+        'flex flex-wrap items-center justify-between gap-3 rounded-md border bg-background/40 p-3',
+        lowBalance
+          ? 'border-violet-500/50'
+          : exhausted
+            ? 'border-rose-500/50'
+            : 'border-border',
+      )}
+    >
       <div className="min-w-0 flex-1">
-        <div className="text-sm font-semibold">
+        <div className="flex flex-wrap items-center gap-2 text-sm font-semibold">
           {student?.full_name ?? '(unknown student)'} ·{' '}
           {service?.name ?? '(deleted service)'}
+          {lowBalance ? (
+            <Badge variant="default" className="bg-violet-500/30 text-violet-100">
+              Re-up time
+            </Badge>
+          ) : null}
         </div>
         <div className="mt-0.5 text-xs text-muted-foreground">
           {remaining}/{total} left · {fmtCents(p.price_per_session_cents)}/session
