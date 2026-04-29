@@ -34,13 +34,13 @@ import {
   type ScheduleStatus,
   type ServiceRow,
 } from '@/lib/api/billing';
-import {
-  calendarApi,
-  type CalendarEvent,
-  type PlannedEvent,
-  type ScheduledEvent,
+import type {
+  CalendarEvent,
+  PlannedEvent,
+  ScheduledEvent,
 } from '@/lib/api/calendar';
 import { plansApi } from '@/lib/api/plans';
+import { sessionsApi } from '@/lib/api/sessions';
 import { describeApiError } from '@/lib/api';
 import type { Student } from '@/lib/types';
 
@@ -418,7 +418,18 @@ function EventDetailDialog({
     if (!event) return;
     setBusy(true);
     try {
-      await calendarApi.markComplete(event.kind, event.id);
+      // Canonical fulfillment path — POST /api/sessions with quick_log=true
+      // and the appropriate linkage. Backend marks the source row fulfilled.
+      await sessionsApi.create({
+        student_id: event.student_id,
+        session_date: event.starts_at.slice(0, 10),
+        duration_minutes: event.duration_minutes ?? null,
+        mode: 'text',
+        quick_log: true,
+        scheduled_session_id:
+          event.kind === 'scheduled' ? event.id : null,
+        planned_session_id: event.kind === 'planned' ? event.id : null,
+      });
       toast.success('Marked done');
       onChanged();
     } catch (err) {
