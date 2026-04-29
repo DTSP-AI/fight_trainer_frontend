@@ -134,7 +134,9 @@ export function StudentDetail({ studentId }: StudentDetailProps) {
               Edit plan
             </Link>
           </Button>
-          {student.invite_email && student.invite_status === 'pending' ? (
+          {student.invite_email &&
+          (student.invite_status === 'pending' ||
+            student.invite_status === 'sent') ? (
             <Button
               variant="outline"
               onClick={resendInvite}
@@ -147,12 +149,18 @@ export function StudentDetail({ studentId }: StudentDetailProps) {
         </div>
       </div>
 
-      {student.invite_email && student.invite_status === 'pending' ? (
+      {student.invite_email &&
+      (student.invite_status === 'pending' ||
+        student.invite_status === 'sent') ? (
         <p className="rounded-md border border-amber-500/40 bg-amber-500/10 p-3 text-sm">
-          <strong>Invite pending</strong> — emailed{' '}
+          <strong>
+            {student.invite_status === 'sent'
+              ? 'Invite sent — awaiting accept'
+              : 'Invite pending'}
+          </strong>{' '}
+          — emailed{' '}
           <span className="font-mono">{student.invite_email}</span>. If they
-          didn't get it, hit "Resend invite" above. (Falls back to copying the
-          link if Resend isn't configured.)
+          didn't get it, hit "Resend invite" above.
         </p>
       ) : null}
 

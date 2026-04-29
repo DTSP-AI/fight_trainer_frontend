@@ -101,7 +101,7 @@ export interface Student {
   started_training_at?: string | null;
   notes?: string | null;
   invite_email?: string | null;
-  invite_status?: 'pending' | 'accepted' | 'n/a' | null;
+  invite_status?: 'pending' | 'sent' | 'accepted' | 'n/a' | null;
   created_at?: string;
 }
 
