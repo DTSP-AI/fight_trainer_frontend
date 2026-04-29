@@ -9,6 +9,7 @@ import {
   ChevronRight,
   CircleSlash,
   Dumbbell,
+  Pencil,
   Trash2,
   X,
 } from 'lucide-react';
@@ -23,6 +24,9 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { AssistedTextarea } from '@/components/common/assisted-textarea';
 import { cn } from '@/lib/utils';
 import {
   billingApi,
@@ -367,6 +371,7 @@ function EventDetailDialog({
 }) {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
+  const [editing, setEditing] = useState(false);
 
   if (!event) return null;
 
@@ -462,7 +467,15 @@ function EventDetailDialog({
   const planAlreadyDone = planned && planned.fulfilled_session_id;
 
   return (
-    <Dialog open={!!event} onOpenChange={(o) => (!o ? onClose() : null)}>
+    <Dialog
+      open={!!event}
+      onOpenChange={(o) => {
+        if (!o) {
+          setEditing(false);
+          onClose();
+        }
+      }}
+    >
       <DialogContent>
         <DialogHeader>
           <DialogTitle>
@@ -474,6 +487,19 @@ function EventDetailDialog({
           </DialogDescription>
         </DialogHeader>
 
+        {editing && scheduled ? (
+          <EditScheduledForm
+            scheduled={scheduled}
+            studentId={event.student_id}
+            onSaved={() => {
+              setEditing(false);
+              onChanged();
+            }}
+            onCancel={() => setEditing(false)}
+          />
+        ) : null}
+
+        {!editing ? (
         <div className="space-y-2 text-sm">
           <div className="flex flex-wrap items-center gap-2">
             {scheduled ? (
@@ -524,7 +550,9 @@ function EventDetailDialog({
             </p>
           ) : null}
         </div>
+        ) : null}
 
+        {!editing ? (
         <DialogFooter className="flex-col gap-2 sm:flex-col sm:items-stretch">
           {/* Primary action row — Mark Done is the everyday path. */}
           {!event.fulfilled_session_id && !planAlreadyDone ? (
@@ -578,8 +606,19 @@ function EventDetailDialog({
             </button>
           ) : null}
 
-          {/* Always-available destructive action — bottom row. */}
-          <div className="flex justify-end">
+          {/* Edit + delete row — always available. Edit only on scheduled. */}
+          <div className="flex justify-end gap-2">
+            {scheduled ? (
+              <Button
+                variant="ghost"
+                size="sm"
+                disabled={busy}
+                onClick={() => setEditing(true)}
+              >
+                <Pencil className="h-4 w-4" />
+                Edit
+              </Button>
+            ) : null}
             <Button
               variant="ghost"
               size="sm"
@@ -592,8 +631,106 @@ function EventDetailDialog({
             </Button>
           </div>
         </DialogFooter>
+        ) : null}
       </DialogContent>
     </Dialog>
+  );
+}
+
+function EditScheduledForm({
+  scheduled,
+  studentId,
+  onSaved,
+  onCancel,
+}: {
+  scheduled: ScheduledEvent;
+  studentId: string;
+  onSaved: () => void;
+  onCancel: () => void;
+}) {
+  // Convert ISO timestamp to the value an <input type="datetime-local"> wants.
+  const initialLocal = (() => {
+    try {
+      const d = new Date(scheduled.starts_at);
+      const yyyy = d.getFullYear();
+      const mm = String(d.getMonth() + 1).padStart(2, '0');
+      const dd = String(d.getDate()).padStart(2, '0');
+      const hh = String(d.getHours()).padStart(2, '0');
+      const mi = String(d.getMinutes()).padStart(2, '0');
+      return `${yyyy}-${mm}-${dd}T${hh}:${mi}`;
+    } catch {
+      return '';
+    }
+  })();
+
+  const [scheduledFor, setScheduledFor] = useState(initialLocal);
+  const [duration, setDuration] = useState(
+    String(scheduled.duration_minutes ?? 60),
+  );
+  const [notes, setNotes] = useState((scheduled as ScheduledEvent & { notes?: string | null }).notes ?? '');
+  const [busy, setBusy] = useState(false);
+
+  async function submit(e: React.FormEvent) {
+    e.preventDefault();
+    setBusy(true);
+    try {
+      await billingApi.updateSchedule(scheduled.id, {
+        scheduled_for: new Date(scheduledFor).toISOString(),
+        duration_minutes: Number(duration),
+        notes: notes || undefined,
+      });
+      toast.success('Session updated');
+      onSaved();
+    } catch (err) {
+      toast.error(describeApiError(err));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <form onSubmit={submit} className="space-y-3">
+      <div className="grid gap-3 md:grid-cols-2">
+        <div className="space-y-2">
+          <Label>When</Label>
+          <Input
+            type="datetime-local"
+            value={scheduledFor}
+            onChange={(e) => setScheduledFor(e.target.value)}
+            required
+          />
+        </div>
+        <div className="space-y-2">
+          <Label>Duration (min)</Label>
+          <Input
+            type="number"
+            min={15}
+            max={480}
+            value={duration}
+            onChange={(e) => setDuration(e.target.value)}
+            required
+          />
+        </div>
+      </div>
+      <div className="space-y-2">
+        <Label>Notes</Label>
+        <AssistedTextarea
+          rows={2}
+          value={notes}
+          onChange={setNotes}
+          assistKind="schedule_notes"
+          assistStudentId={studentId}
+        />
+      </div>
+      <div className="flex gap-2">
+        <Button type="submit" disabled={busy}>
+          {busy ? 'Saving…' : 'Save changes'}
+        </Button>
+        <Button type="button" variant="ghost" onClick={onCancel}>
+          Cancel
+        </Button>
+      </div>
+    </form>
   );
 }
 

@@ -10,6 +10,7 @@ import {
   CircleSlash,
   Layers,
   List,
+  Pencil,
   Plus,
   Trash2,
   X,
@@ -433,6 +434,8 @@ function ServiceRowItem({
   onChanged: () => void;
 }) {
   const [busy, setBusy] = useState(false);
+  const [editing, setEditing] = useState(false);
+
   async function toggleActive() {
     setBusy(true);
     try {
@@ -460,6 +463,20 @@ function ServiceRowItem({
       setBusy(false);
     }
   }
+
+  if (editing) {
+    return (
+      <EditServiceForm
+        s={s}
+        onSaved={() => {
+          setEditing(false);
+          onChanged();
+        }}
+        onCancel={() => setEditing(false)}
+      />
+    );
+  }
+
   return (
     <div className="flex items-center justify-between rounded-md border border-border bg-background/40 p-3">
       <div className="min-w-0">
@@ -477,6 +494,15 @@ function ServiceRowItem({
         </div>
       </div>
       <div className="flex items-center gap-1">
+        <Button
+          size="icon"
+          variant="ghost"
+          disabled={busy}
+          onClick={() => setEditing(true)}
+          aria-label="Edit service"
+        >
+          <Pencil className="h-4 w-4" />
+        </Button>
         <Button size="sm" variant="ghost" disabled={busy} onClick={toggleActive}>
           {s.is_active ? 'Archive' : 'Activate'}
         </Button>
@@ -492,6 +518,115 @@ function ServiceRowItem({
         </Button>
       </div>
     </div>
+  );
+}
+
+function EditServiceForm({
+  s,
+  onSaved,
+  onCancel,
+}: {
+  s: ServiceRow;
+  onSaved: () => void;
+  onCancel: () => void;
+}) {
+  const [name, setName] = useState(s.name);
+  const [sport, setSport] = useState<Sport>(s.sport);
+  const [duration, setDuration] = useState(String(s.default_duration_minutes));
+  const [price, setPrice] = useState((s.default_price_cents / 100).toFixed(2));
+  const [description, setDescription] = useState(s.description ?? '');
+  const [busy, setBusy] = useState(false);
+
+  async function submit(e: React.FormEvent) {
+    e.preventDefault();
+    setBusy(true);
+    try {
+      await billingApi.updateService(s.id, {
+        name: name.trim(),
+        sport,
+        default_duration_minutes: Number(duration),
+        default_price_cents: Math.round(Number(price) * 100),
+        description: description.trim() || undefined,
+      });
+      toast.success('Service updated');
+      onSaved();
+    } catch (err) {
+      toast.error(describeApiError(err));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <form
+      onSubmit={submit}
+      className="space-y-3 rounded-md border border-primary/40 bg-background/60 p-4"
+    >
+      <div className="grid gap-3 md:grid-cols-2">
+        <div className="space-y-2">
+          <Label>Name</Label>
+          <Input
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            required
+          />
+        </div>
+        <div className="space-y-2">
+          <Label>Sport</Label>
+          <select
+            className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+            value={sport}
+            onChange={(e) => setSport(e.target.value as Sport)}
+            required
+          >
+            {SPORTS.map((sp) => (
+              <option key={sp} value={sp}>
+                {sp.replace('_', ' ')}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div className="space-y-2">
+          <Label>Duration (min)</Label>
+          <Input
+            type="number"
+            min={15}
+            max={480}
+            value={duration}
+            onChange={(e) => setDuration(e.target.value)}
+            required
+          />
+        </div>
+        <div className="space-y-2">
+          <Label>Price ($)</Label>
+          <Input
+            type="number"
+            step="0.01"
+            min={0}
+            value={price}
+            onChange={(e) => setPrice(e.target.value)}
+            required
+          />
+        </div>
+      </div>
+      <div className="space-y-2">
+        <Label>Description</Label>
+        <AssistedTextarea
+          rows={2}
+          value={description}
+          onChange={setDescription}
+          assistKind="service_description"
+        />
+      </div>
+      <div className="flex gap-2">
+        <Button type="submit" disabled={busy}>
+          {busy ? 'Saving…' : 'Save changes'}
+        </Button>
+        <Button type="button" variant="ghost" onClick={onCancel}>
+          Cancel
+        </Button>
+      </div>
+    </form>
   );
 }
 
