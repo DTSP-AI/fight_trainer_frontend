@@ -6,6 +6,7 @@ import {
   CalendarDays,
   Film,
   Library,
+  Network,
   Receipt,
   Sparkles,
   Trophy,
@@ -25,6 +26,7 @@ const NAV: SidebarItem[] = [
   { href: '/trainer/library', label: 'Library', icon: <Library className="h-4 w-4" /> },
   { href: '/trainer/analyze', label: 'Analyzer', icon: <Sparkles className="h-4 w-4" /> },
   { href: '/trainer/fighters', label: 'Fighter bank', icon: <Trophy className="h-4 w-4" /> },
+  { href: '/trainer/graph', label: 'Graph', icon: <Network className="h-4 w-4" /> },
   {
     href: '/trainer/inactivity',
     label: 'Inactivity',
