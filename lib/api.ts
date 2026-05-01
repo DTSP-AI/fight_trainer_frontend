@@ -85,8 +85,7 @@ async function request<T>(
       method,
       headers,
       body,
-      cache:
-        options.cache ?? (method === 'GET' ? 'no-store' : 'no-store'),
+      cache: options.cache ?? 'no-store',
       credentials: 'include',
     });
   } catch (err) {
