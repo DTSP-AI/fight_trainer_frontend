@@ -15,6 +15,8 @@ export interface GraphNode {
 
 export type EdgeKind = 'sets_up' | 'counters' | 'follows_from' | 'chains_to';
 
+export type Initiative = 'lead' | 'sim_counter' | 'delayed_counter' | 'feint';
+
 export interface GraphEdge {
   id: string;
   from_technique_id: string;
@@ -24,6 +26,8 @@ export interface GraphEdge {
   contribution_count: number;
   sport?: string | null;
   last_contributed_at?: string | null;
+  primary_initiative?: Initiative | null;
+  initiative_distribution?: Partial<Record<Initiative, number>>;
 }
 
 export interface StudentOverlay {
@@ -51,12 +55,14 @@ export const graphApi = {
   edges: (params?: {
     sport?: string;
     kind?: EdgeKind;
+    initiative?: Initiative;
     min_weight?: number;
     limit?: number;
   }) => {
     const qs = new URLSearchParams();
     if (params?.sport) qs.set('sport', params.sport);
     if (params?.kind) qs.set('kind', params.kind);
+    if (params?.initiative) qs.set('initiative', params.initiative);
     if (params?.min_weight != null)
       qs.set('min_weight', String(params.min_weight));
     if (params?.limit) qs.set('limit', String(params.limit));

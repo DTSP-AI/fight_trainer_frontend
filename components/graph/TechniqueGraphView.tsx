@@ -7,31 +7,44 @@
  */
 import { useEffect, useMemo, useState } from 'react';
 import { KnowledgeGraph3D } from './KnowledgeGraph3D';
-import { graphApi, type GraphEdge, type GraphNode } from '@/lib/api/graph';
+import {
+  graphApi,
+  type GraphEdge,
+  type GraphNode,
+  type Initiative,
+} from '@/lib/api/graph';
 import { describeApiError } from '@/lib/api';
 import { LoadingState } from '@/components/common/loading-state';
 
 const DISCIPLINE_PALETTE: Record<string, string> = {
-  submission: '#a78bfa', // violet
-  strike: '#fbbf24', // amber
-  takedown: '#38bdf8', // sky
-  control: '#34d399', // emerald
+  submission: '#a78bfa',
+  strike: '#fbbf24',
+  takedown: '#38bdf8',
+  control: '#34d399',
   guard: '#34d399',
-  defense: '#fb923c', // orange
-  transition: '#f472b6', // pink
-  default: '#94a3b8', // slate
+  defense: '#fb923c',
+  transition: '#f472b6',
+  default: '#94a3b8',
 };
 
 const STUDENT_OVERLAY_PALETTE: Record<string, string> = {
-  // Drilled = bright emerald, focus = violet, recommended = amber.
   drilled: '#10b981',
   focus: '#a78bfa',
   recommended: '#f59e0b',
 };
 
+const INITIATIVE_PALETTE: Record<string, string> = {
+  lead: '#f59e0b', // amber — Ken no Sen
+  sim_counter: '#a78bfa', // violet — Tai no Sen
+  delayed_counter: '#10b981', // emerald — Go no Sen
+  feint: '#fb7185', // rose — deception
+  default: '#475569', // slate — unclassified
+};
+
 interface Props {
   sport?: string;
   studentId?: string;
+  initiative?: Initiative;
   height?: number;
   className?: string;
 }
@@ -39,6 +52,7 @@ interface Props {
 export function TechniqueGraphView({
   sport,
   studentId,
+  initiative,
   height = 640,
   className,
 }: Props) {
@@ -54,7 +68,12 @@ export function TechniqueGraphView({
       try {
         const [n, e] = await Promise.all([
           graphApi.techniques({ sport, limit: 1500 }),
-          graphApi.edges({ sport, min_weight: 0.0, limit: 5000 }),
+          graphApi.edges({
+            sport,
+            initiative,
+            min_weight: 0.0,
+            limit: 5000,
+          }),
         ]);
         if (cancelled) return;
         setNodes(n);
@@ -66,7 +85,7 @@ export function TechniqueGraphView({
     return () => {
       cancelled = true;
     };
-  }, [sport]);
+  }, [sport, initiative]);
 
   useEffect(() => {
     if (!studentId) {
@@ -146,12 +165,14 @@ export function TechniqueGraphView({
       type: e.kind,
       weight: e.weight,
       frequency: e.contribution_count,
+      primary_initiative: e.primary_initiative ?? null,
     }));
 
     return {
       nodes: mappedNodes,
       edges: mappedEdges,
       palette,
+      edgePalette: INITIATIVE_PALETTE,
       metadata: { project: 'Fight Trainer KG' },
     };
   }, [nodes, edges, drilled, focus, studentId]);

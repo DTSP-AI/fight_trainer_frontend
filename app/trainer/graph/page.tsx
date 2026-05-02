@@ -6,8 +6,13 @@ import { Sparkles } from 'lucide-react';
 import { TechniqueGraphView } from '@/components/graph/TechniqueGraphView';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { graphApi, type RecentContributions } from '@/lib/api/graph';
+import {
+  graphApi,
+  type Initiative,
+  type RecentContributions,
+} from '@/lib/api/graph';
 import { LoadingState } from '@/components/common/loading-state';
+import { cn } from '@/lib/utils';
 
 const SPORTS = [
   { value: '', label: 'All sports' },
@@ -19,10 +24,23 @@ const SPORTS = [
   { value: 'wrestling', label: 'Wrestling' },
 ];
 
+const INITIATIVE_FILTERS: Array<{
+  value: '' | Initiative;
+  label: string;
+  swatch: string;
+}> = [
+  { value: '', label: 'All initiatives', swatch: '#475569' },
+  { value: 'lead', label: 'Lead', swatch: '#f59e0b' },
+  { value: 'sim_counter', label: 'Sim Counter', swatch: '#a78bfa' },
+  { value: 'delayed_counter', label: 'Delayed Counter', swatch: '#10b981' },
+  { value: 'feint', label: 'Feint', swatch: '#fb7185' },
+];
+
 function GraphPageInner() {
   const params = useSearchParams();
   const studentId = params.get('student') ?? undefined;
   const [sport, setSport] = useState<string>('');
+  const [initiative, setInitiative] = useState<'' | Initiative>('');
   const [recent, setRecent] = useState<RecentContributions | null>(null);
 
   useEffect(() => {
@@ -71,22 +89,47 @@ function GraphPageInner() {
         </Card>
       ) : null}
 
-      <div className="flex flex-wrap gap-2">
-        {SPORTS.map((s) => (
-          <Button
-            key={s.value || 'all'}
-            size="sm"
-            variant={sport === s.value ? 'default' : 'outline'}
-            onClick={() => setSport(s.value)}
-          >
-            {s.label}
-          </Button>
-        ))}
+      <div className="space-y-2">
+        <div className="flex flex-wrap gap-2">
+          {SPORTS.map((s) => (
+            <Button
+              key={s.value || 'all'}
+              size="sm"
+              variant={sport === s.value ? 'default' : 'outline'}
+              onClick={() => setSport(s.value)}
+            >
+              {s.label}
+            </Button>
+          ))}
+        </div>
+        <div className="flex flex-wrap gap-2">
+          {INITIATIVE_FILTERS.map((i) => (
+            <Button
+              key={i.value || 'all'}
+              size="sm"
+              variant={initiative === i.value ? 'default' : 'outline'}
+              onClick={() => setInitiative(i.value)}
+              className={cn(
+                'gap-1.5',
+                initiative === i.value
+                  ? 'border-transparent'
+                  : 'border-border',
+              )}
+            >
+              <span
+                className="h-2.5 w-2.5 rounded-sm"
+                style={{ background: i.swatch }}
+              />
+              {i.label}
+            </Button>
+          ))}
+        </div>
       </div>
 
       <TechniqueGraphView
         sport={sport || undefined}
         studentId={studentId}
+        initiative={initiative || undefined}
         height={680}
       />
     </div>

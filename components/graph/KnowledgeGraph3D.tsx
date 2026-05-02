@@ -1,27 +1,35 @@
 'use client';
 
 /**
- * KnowledgeGraph3D — drop-in React component for any agentic-kg-pipeline project.
+ * KnowledgeGraph3D — Fight Trainer-tuned 3D force graph.
  *
- * Schema contract: assets/kg_schema.json (matches the standalone graph_viewer.html).
+ * Differences from the generic agentic-kg-pipeline drop-in:
+ *   - Node drag enabled, smoother orbit controls (not trackball).
+ *   - Fly-to-node on click, fit-to-view on data load + on-demand reset.
+ *   - Cursor-following hover tooltip instead of pinned bottom-left.
+ *   - Tailwind-themed overlays (legend, header) instead of inline styles.
+ *   - Edge color carries `primary_initiative` (Musashi's 3 + Feint).
+ *   - Color fallback chain on nodes so nothing is gray-by-default.
  *
- * Usage (Next.js 13+ / 16):
- *   import { KnowledgeGraph3D } from '@/components/KnowledgeGraph3D';
- *   <KnowledgeGraph3D fetchUrl="/api/v1/knowledge-graph" />
- *   // or
- *   <KnowledgeGraph3D data={{ nodes, edges }} />
- *
- * Requires: `pnpm add react-force-graph-3d three` (or npm/yarn equivalent).
- *
- * SSR-safe via dynamic import — react-force-graph-3d cannot render server-side.
+ * Schema contract: matches assets/kg_schema.json — adds optional
+ * `primary_initiative` on edges and `palette.edges` for edge color overrides.
  */
 
-import { useEffect, useMemo, useRef, useState, useCallback } from 'react';
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  useCallback,
+  type MouseEvent as ReactMouseEvent,
+} from 'react';
 import dynamic from 'next/dynamic';
+import { Maximize2, RotateCcw } from 'lucide-react';
+import { cn } from '@/lib/utils';
 
 const ForceGraph3D = dynamic(() => import('react-force-graph-3d'), { ssr: false });
 
-// ── Types matching kg_schema.json ─────────────────────────────────
+// ── Types ──────────────────────────────────────────────────────────
 
 export interface KGNode {
   id: string;
@@ -39,68 +47,77 @@ export interface KGEdge {
   type: string;
   weight?: number;
   frequency?: number;
-  extraction_source?: string;
+  /** Musashi initiative classification — drives edge color. */
+  primary_initiative?: 'lead' | 'sim_counter' | 'delayed_counter' | 'feint' | null;
   [key: string]: unknown;
 }
 
 export interface KGPayload {
   nodes: KGNode[];
   edges: KGEdge[];
+  /** Primary palette: maps node `type` → hex color. */
   palette?: Record<string, string>;
+  /** Optional edge palette: maps `primary_initiative` → hex color. */
+  edgePalette?: Record<string, string>;
   metadata?: Record<string, unknown>;
 }
 
 export interface KnowledgeGraph3DProps {
-  /** Direct payload. Mutually exclusive with `fetchUrl`. */
   data?: KGPayload;
-  /** Endpoint that returns the KG payload. Re-fetched when `refreshKey` changes. */
   fetchUrl?: string;
-  /** Increment to force a re-fetch. */
   refreshKey?: number | string;
-  /** Override or extend the default type→color palette. */
   palette?: Record<string, string>;
-  /** Pixel height. Default 500. */
+  edgePalette?: Record<string, string>;
   height?: number;
-  /** Background color. Default "#030712". */
   backgroundColor?: string;
-  /** Called when a node is clicked. */
   onNodeClick?: (node: KGNode) => void;
-  /** Show the inline legend. Default true. */
   showLegend?: boolean;
-  /** Show the header (project, stats). Default true. */
   showHeader?: boolean;
-  /** Optional className applied to the root wrapper. */
   className?: string;
-  /** Optional auth header for fetchUrl (e.g., bearer token). */
   authHeader?: string;
 }
 
-// ── Default palette (extend per-project via `palette` prop) ────────
+// ── Defaults ───────────────────────────────────────────────────────
 
-const DEFAULT_PALETTE: Record<string, string> = {
-  Organization: '#c084fc',
-  Person: '#60a5fa',
-  Product: '#4ade80',
-  Feature: '#34d399',
-  UseCase: '#a78bfa',
-  Policy: '#fb923c',
-  Regulation: '#f59e0b',
-  Technology: '#22d3ee',
-  Concept: '#facc15',
-  Market: '#f97316',
-  Objection: '#f87171',
-  Pricing: '#fbbf24',
-  Stack: '#8b5cf6',
-  Integration: '#2dd4bf',
-  Category: '#e879f9',
-  Competitor: '#ef4444',
-  Event: '#f472b6',
-  Location: '#9ca3af',
-  Unknown: '#6b7280',
+const DEFAULT_NODE_PALETTE: Record<string, string> = {
+  // Combat-sport discipline classes (Fight Trainer canonical):
+  submission: '#a78bfa',
+  strike: '#fbbf24',
+  takedown: '#38bdf8',
+  control: '#34d399',
+  guard: '#34d399',
+  defense: '#fb923c',
+  transition: '#f472b6',
+  // Student overlay:
+  drilled: '#10b981',
+  focus: '#a78bfa',
+  recommended: '#f59e0b',
+  // Unknown fallback:
+  default: '#94a3b8',
 };
 
-const LARGE_GRAPH_NODE_THRESHOLD = 140;
-const LARGE_GRAPH_EDGE_THRESHOLD = 260;
+const DEFAULT_EDGE_PALETTE: Record<string, string> = {
+  // Musashi's 3 + Feint:
+  lead: '#f59e0b', // amber — initiative of attack
+  sim_counter: '#a78bfa', // violet — meet on the same beat
+  delayed_counter: '#10b981', // emerald — counter on recovery
+  feint: '#fb7185', // rose — deception
+  // Unclassified:
+  default: '#475569', // slate — quiet until evidence accrues
+};
+
+// Stable hash → hue so unknown node types still get a unique non-gray color.
+function hashHue(s: string): number {
+  let h = 0;
+  for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) | 0;
+  return Math.abs(h) % 360;
+}
+function fallbackColor(seed: string): string {
+  return `hsl(${hashHue(seed)} 65% 60%)`;
+}
+
+const LARGE_NODE_THRESHOLD = 140;
+const LARGE_EDGE_THRESHOLD = 260;
 
 // ── Component ──────────────────────────────────────────────────────
 
@@ -109,8 +126,9 @@ export function KnowledgeGraph3D({
   fetchUrl,
   refreshKey,
   palette,
-  height = 500,
-  backgroundColor = '#030712',
+  edgePalette,
+  height = 640,
+  backgroundColor = '#020617',
   onNodeClick,
   showLegend = true,
   showHeader = true,
@@ -122,16 +140,22 @@ export function KnowledgeGraph3D({
   const [error, setError] = useState<string>('');
   const [hidden, setHidden] = useState<Set<string>>(new Set());
   const [hovered, setHovered] = useState<KGNode | null>(null);
+  const [tooltipPos, setTooltipPos] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
   const [size, setSize] = useState({ width: 800, height });
   const containerRef = useRef<HTMLDivElement>(null);
+  // react-force-graph-3d's ref is loosely typed — we cast at the call sites.
   const graphRef = useRef<unknown>(null);
 
-  const mergedPalette = useMemo(
-    () => ({ ...DEFAULT_PALETTE, ...(payload?.palette ?? {}), ...(palette ?? {}) }),
+  const nodePalette = useMemo(
+    () => ({ ...DEFAULT_NODE_PALETTE, ...(payload?.palette ?? {}), ...(palette ?? {}) }),
     [palette, payload?.palette],
   );
+  const edgeInitiativePalette = useMemo(
+    () => ({ ...DEFAULT_EDGE_PALETTE, ...(payload?.edgePalette ?? {}), ...(edgePalette ?? {}) }),
+    [edgePalette, payload?.edgePalette],
+  );
 
-  // Fetch payload if fetchUrl is provided
+  // ── Fetch ──
   useEffect(() => {
     if (data) {
       setPayload(data);
@@ -168,7 +192,7 @@ export function KnowledgeGraph3D({
     };
   }, [data, fetchUrl, refreshKey, authHeader]);
 
-  // Track container size for responsive rendering
+  // ── Responsive sizing ──
   useEffect(() => {
     if (!containerRef.current) return;
     const obs = new ResizeObserver((entries) => {
@@ -181,7 +205,7 @@ export function KnowledgeGraph3D({
     return () => obs.disconnect();
   }, []);
 
-  // Build derived graph data — filter hidden types, compute degree
+  // ── Build derived data ──
   const graphData = useMemo(() => {
     if (!payload) return { nodes: [], links: [] };
     const visibleNodes = payload.nodes.filter((n) => !hidden.has(n.type));
@@ -192,11 +216,24 @@ export function KnowledgeGraph3D({
       degree[e.source] = (degree[e.source] ?? 0) + 1;
       degree[e.target] = (degree[e.target] ?? 0) + 1;
     }
+
+    const colorFor = (n: KGNode): string => {
+      const explicit = nodePalette[n.type];
+      if (explicit) return explicit;
+      // Fallback chain so no node is ever gray-by-default.
+      const sportProp =
+        typeof n.props?.sport === 'string' ? (n.props.sport as string) : '';
+      if (sportProp && nodePalette[sportProp]) return nodePalette[sportProp];
+      return fallbackColor(n.type || n.id);
+    };
+
     return {
       nodes: visibleNodes.map((n) => ({
         ...n,
-        val: Math.max(2.5, Math.min(9, 2.5 + Math.sqrt(degree[n.id] ?? 0) * 0.9)) * (n.canonical ? 1.4 : 1),
-        color: mergedPalette[n.type] ?? mergedPalette.Unknown,
+        val:
+          Math.max(2.5, Math.min(9, 2.5 + Math.sqrt(degree[n.id] ?? 0) * 0.9)) *
+          (n.canonical ? 1.4 : 1),
+        color: colorFor(n),
       })),
       links: payload.edges
         .filter((e) => visibleIds.has(e.source) && visibleIds.has(e.target))
@@ -206,13 +243,18 @@ export function KnowledgeGraph3D({
           type: e.type,
           weight: e.weight ?? 1,
           frequency: e.frequency,
+          primary_initiative: e.primary_initiative ?? null,
+          color:
+            (e.primary_initiative &&
+              edgeInitiativePalette[e.primary_initiative]) ||
+            edgeInitiativePalette.default,
         })),
     };
-  }, [payload, hidden, mergedPalette]);
+  }, [payload, hidden, nodePalette, edgeInitiativePalette]);
 
   const isLarge =
-    graphData.nodes.length > LARGE_GRAPH_NODE_THRESHOLD ||
-    graphData.links.length > LARGE_GRAPH_EDGE_THRESHOLD;
+    graphData.nodes.length > LARGE_NODE_THRESHOLD ||
+    graphData.links.length > LARGE_EDGE_THRESHOLD;
 
   const typeCounts = useMemo(() => {
     const c: Record<string, number> = {};
@@ -230,21 +272,74 @@ export function KnowledgeGraph3D({
     });
   }, []);
 
+  // ── Camera controls ──
+  function fitView() {
+    const g = graphRef.current as
+      | { zoomToFit?: (ms?: number, padding?: number) => void }
+      | null;
+    g?.zoomToFit?.(800, 60);
+  }
+
+  function flyToNode(node: KGNode & { x?: number; y?: number; z?: number }) {
+    const g = graphRef.current as
+      | {
+          cameraPosition?: (
+            pos: { x: number; y: number; z: number },
+            lookAt?: { x: number; y: number; z: number },
+            ms?: number,
+          ) => void;
+        }
+      | null;
+    if (!g?.cameraPosition || node.x == null || node.y == null || node.z == null) {
+      return;
+    }
+    const dist = 80;
+    const r = Math.hypot(node.x, node.y, node.z) || 1;
+    g.cameraPosition(
+      {
+        x: node.x * (1 + dist / r),
+        y: node.y * (1 + dist / r),
+        z: node.z * (1 + dist / r),
+      },
+      { x: node.x, y: node.y, z: node.z },
+      900,
+    );
+  }
+
+  // Auto-fit once layout has cooled.
+  const handleEngineStop = useCallback(() => {
+    fitView();
+  }, []);
+
   const handleNodeClick = useCallback(
     (n: object) => {
-      onNodeClick?.(n as KGNode);
+      const node = n as KGNode & { x?: number; y?: number; z?: number };
+      flyToNode(node);
+      onNodeClick?.(node);
     },
     [onNodeClick],
   );
+
+  // ── Hover tooltip follows cursor ──
+  function handleMouseMove(e: ReactMouseEvent<HTMLDivElement>) {
+    const rect = containerRef.current?.getBoundingClientRect();
+    if (!rect) return;
+    setTooltipPos({ x: e.clientX - rect.left, y: e.clientY - rect.top });
+  }
+
+  // ── Render ──
 
   if (loading) {
     return (
       <div
         ref={containerRef}
-        className={className}
-        style={{ height, display: 'flex', alignItems: 'center', justifyContent: 'center', background: backgroundColor, color: '#9ca3af', fontSize: 13 }}
+        className={cn(
+          'flex items-center justify-center rounded-md border border-border bg-background/40 text-sm text-muted-foreground',
+          className,
+        )}
+        style={{ height, background: backgroundColor }}
       >
-        Loading graph...
+        Loading graph…
       </div>
     );
   }
@@ -253,8 +348,11 @@ export function KnowledgeGraph3D({
     return (
       <div
         ref={containerRef}
-        className={className}
-        style={{ height, padding: 16, background: backgroundColor, color: '#fca5a5', border: '1px solid rgba(239,68,68,0.3)', borderRadius: 8 }}
+        className={cn(
+          'rounded-md border border-destructive/40 bg-destructive/10 p-4 text-sm text-destructive',
+          className,
+        )}
+        style={{ height, background: backgroundColor }}
       >
         Failed to load graph: {error}
       </div>
@@ -265,105 +363,172 @@ export function KnowledgeGraph3D({
     return (
       <div
         ref={containerRef}
-        className={className}
-        style={{ height, display: 'flex', alignItems: 'center', justifyContent: 'center', background: backgroundColor, color: '#9ca3af', fontSize: 13 }}
+        className={cn(
+          'flex items-center justify-center rounded-md border border-border bg-background/40 text-sm text-muted-foreground',
+          className,
+        )}
+        style={{ height, background: backgroundColor }}
       >
-        No graph data
+        No graph data yet — run a fight breakdown and edges will start
+        accreting here.
       </div>
     );
   }
 
   return (
-    <div ref={containerRef} className={className} style={{ position: 'relative', height, background: backgroundColor, borderRadius: 8, overflow: 'hidden' }}>
+    <div
+      ref={containerRef}
+      className={cn('relative overflow-hidden rounded-md', className)}
+      style={{ height, background: backgroundColor }}
+      onMouseMove={handleMouseMove}
+    >
+      {/* Header */}
       {showHeader && (
-        <div
-          style={{
-            position: 'absolute', top: 12, left: 12, zIndex: 2,
-            background: 'rgba(15,23,42,0.92)', border: '1px solid rgba(255,255,255,0.08)',
-            borderRadius: 8, padding: '8px 12px', fontSize: 12, color: '#e5e7eb',
-            backdropFilter: 'blur(8px)',
-          }}
-        >
-          <div style={{ fontWeight: 600 }}>{(payload.metadata?.project as string) ?? 'Knowledge Graph'}</div>
-          <div style={{ color: '#9ca3af', fontSize: 11, marginTop: 2 }}>
-            {graphData.nodes.length} nodes · {graphData.links.length} edges{isLarge ? ' · large mode' : ''}
+        <div className="absolute left-3 top-3 z-10 rounded-md border border-white/10 bg-slate-950/80 px-3 py-2 text-xs text-slate-100 backdrop-blur">
+          <div className="font-semibold">
+            {(payload.metadata?.project as string) ?? 'Knowledge Graph'}
+          </div>
+          <div className="mt-0.5 text-[11px] text-slate-400">
+            {graphData.nodes.length} nodes · {graphData.links.length} edges
+            {isLarge ? ' · perf mode' : ''}
           </div>
         </div>
       )}
 
+      {/* Camera controls */}
+      <div className="absolute right-3 top-3 z-10 flex flex-col gap-1.5">
+        <button
+          type="button"
+          onClick={fitView}
+          title="Fit to view"
+          className="rounded-md border border-white/10 bg-slate-950/80 p-1.5 text-slate-100 backdrop-blur transition-colors hover:bg-slate-900"
+        >
+          <Maximize2 className="h-4 w-4" />
+        </button>
+        <button
+          type="button"
+          onClick={() => {
+            const g = graphRef.current as
+              | { zoomToFit?: (ms?: number, padding?: number) => void }
+              | null;
+            g?.zoomToFit?.(0, 60);
+          }}
+          title="Reset camera"
+          className="rounded-md border border-white/10 bg-slate-950/80 p-1.5 text-slate-100 backdrop-blur transition-colors hover:bg-slate-900"
+        >
+          <RotateCcw className="h-4 w-4" />
+        </button>
+      </div>
+
+      {/* Legend */}
       {showLegend && Object.keys(typeCounts).length > 0 && (
-        <div
-          style={{
-            position: 'absolute', top: 12, right: 12, zIndex: 2,
-            background: 'rgba(15,23,42,0.92)', border: '1px solid rgba(255,255,255,0.08)',
-            borderRadius: 8, padding: '8px 12px', fontSize: 11, color: '#e5e7eb',
-            backdropFilter: 'blur(8px)', maxHeight: '60%', overflowY: 'auto',
-          }}
-        >
-          <div style={{ color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 6, fontWeight: 600 }}>
-            Entity Types
+        <div className="absolute bottom-3 right-3 z-10 max-h-[55%] overflow-y-auto rounded-md border border-white/10 bg-slate-950/80 px-3 py-2 text-[11px] text-slate-100 backdrop-blur">
+          <div className="mb-1.5 text-[10px] font-semibold uppercase tracking-wider text-slate-400">
+            Node types · click to toggle
           </div>
-          {Object.keys(typeCounts).sort().map((t) => (
-            <div
-              key={t}
-              onClick={() => toggleType(t)}
-              style={{
-                display: 'flex', alignItems: 'center', gap: 8, padding: '2px 0',
-                cursor: 'pointer', userSelect: 'none',
-                opacity: hidden.has(t) ? 0.35 : 1,
-              }}
-            >
-              <span style={{
-                width: 10, height: 10, borderRadius: '50%',
-                background: mergedPalette[t] ?? mergedPalette.Unknown,
-              }} />
-              <span>{t}</span>
-              <span style={{ marginLeft: 'auto', color: '#6b7280' }}>{typeCounts[t]}</span>
-            </div>
-          ))}
+          {Object.keys(typeCounts).sort().map((t) => {
+            const color =
+              nodePalette[t] ?? fallbackColor(t);
+            return (
+              <button
+                key={t}
+                type="button"
+                onClick={() => toggleType(t)}
+                className={cn(
+                  'flex w-full items-center gap-2 py-0.5 text-left',
+                  hidden.has(t) ? 'opacity-40' : 'opacity-100',
+                )}
+              >
+                <span
+                  className="h-2.5 w-2.5 rounded-full"
+                  style={{ background: color }}
+                />
+                <span>{t}</span>
+                <span className="ml-auto text-slate-500">{typeCounts[t]}</span>
+              </button>
+            );
+          })}
+
+          <div className="mt-3 mb-1 text-[10px] font-semibold uppercase tracking-wider text-slate-400">
+            Edge initiative
+          </div>
+          {(['lead', 'sim_counter', 'delayed_counter', 'feint'] as const).map(
+            (k) => {
+              const labels = {
+                lead: 'Lead',
+                sim_counter: 'Sim Counter',
+                delayed_counter: 'Delayed Counter',
+                feint: 'Feint',
+              };
+              return (
+                <div key={k} className="flex items-center gap-2 py-0.5">
+                  <span
+                    className="h-2.5 w-2.5 rounded-sm"
+                    style={{ background: edgeInitiativePalette[k] }}
+                  />
+                  <span>{labels[k]}</span>
+                </div>
+              );
+            },
+          )}
         </div>
       )}
 
+      {/* Hover tooltip — follows cursor */}
       {hovered && (
         <div
+          className="pointer-events-none absolute z-20 max-w-xs rounded-md border border-white/15 bg-slate-950/95 px-3 py-2 text-xs text-slate-100 shadow-lg backdrop-blur"
           style={{
-            position: 'absolute', bottom: 12, left: 12, zIndex: 2,
-            background: 'rgba(15,23,42,0.96)', border: '1px solid rgba(255,255,255,0.12)',
-            borderRadius: 8, padding: '8px 10px', fontSize: 12, color: '#e5e7eb',
-            backdropFilter: 'blur(8px)', maxWidth: 320,
+            left: Math.min(tooltipPos.x + 14, size.width - 280),
+            top: Math.max(tooltipPos.y - 16, 8),
           }}
         >
-          <div style={{ fontWeight: 600 }}>{hovered.name}</div>
-          <div style={{ color: '#9ca3af', fontSize: 11, marginTop: 2 }}>
-            {hovered.type}{hovered.canonical ? ' · canonical' : ''}
+          <div className="font-semibold">{hovered.name}</div>
+          <div className="mt-0.5 text-[11px] text-slate-400">
+            {hovered.type}
+            {hovered.canonical ? ' · canonical' : ''}
           </div>
-          {hovered.subtitle && <div style={{ marginTop: 4, fontSize: 11 }}>{hovered.subtitle}</div>}
+          {hovered.subtitle ? (
+            <div className="mt-1 text-[11px]">{hovered.subtitle}</div>
+          ) : null}
         </div>
       )}
 
+      {/* The canvas itself */}
       <ForceGraph3D
         ref={graphRef as unknown as React.MutableRefObject<undefined>}
         graphData={graphData}
         width={size.width}
         height={height}
         backgroundColor={backgroundColor}
-        nodeOpacity={0.95}
-        nodeResolution={isLarge ? 4 : 6}
-        nodeColor={(n: object) => (n as KGNode & { color: string }).color}
-        nodeLabel={(n: object) => {
-          const node = n as KGNode;
-          return `${node.name} (${node.type})`;
-        }}
-        linkOpacity={isLarge ? 0.22 : 0.35}
-        linkWidth={(l: object) => Math.max(0.5, ((l as KGEdge).weight ?? 1) * 0.8)}
-        linkResolution={isLarge ? 2 : 4}
-        warmupTicks={isLarge ? 8 : 18}
-        cooldownTicks={isLarge ? 12 : 28}
-        d3AlphaDecay={isLarge ? 0.2 : 0.14}
-        d3VelocityDecay={0.4}
-        enableNodeDrag={false}
+        // ─── Controls: orbit feels natural; trackball had snap-to-axis stickiness ───
+        controlType="orbit"
+        enableNodeDrag
         enableNavigationControls
         showNavInfo={false}
+        // ─── Node + edge styling ───
+        nodeOpacity={0.95}
+        nodeResolution={isLarge ? 4 : 8}
+        nodeColor={(n: object) => (n as KGNode & { color: string }).color}
+        nodeLabel={() => ''} // we render our own cursor-following tooltip
+        linkOpacity={isLarge ? 0.4 : 0.55}
+        linkWidth={(l: object) =>
+          Math.max(0.6, ((l as KGEdge).weight ?? 1) * 1.6)
+        }
+        linkColor={(l: object) => (l as KGEdge & { color: string }).color}
+        linkDirectionalParticles={(l: object) =>
+          ((l as KGEdge).weight ?? 0) > 0.6 ? 2 : 0
+        }
+        linkDirectionalParticleSpeed={0.004}
+        linkDirectionalParticleWidth={1.5}
+        linkResolution={isLarge ? 2 : 4}
+        // ─── Layout — tuned for responsive feel without endless wobble ───
+        warmupTicks={20}
+        cooldownTicks={isLarge ? 60 : 120}
+        d3AlphaDecay={0.025}
+        d3VelocityDecay={0.28}
+        // ─── Interactions ───
+        onEngineStop={handleEngineStop}
         onNodeHover={(n: object | null) => setHovered(n as KGNode | null)}
         onNodeClick={handleNodeClick}
       />
