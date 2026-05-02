@@ -40,6 +40,7 @@
     "sonner": "^1.7.4",
     "tailwind-merge": "^2.6.0",
     "three": "^0.184.0",
+    "three-spritetext": "^1.10.0",
     "zod": "^3.24.1"
   },
   "devDependencies": {

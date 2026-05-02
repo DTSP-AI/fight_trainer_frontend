@@ -1,18 +1,18 @@
 'use client';
 
 /**
- * KnowledgeGraph3D — Fight Trainer-tuned 3D force graph.
+ * KnowledgeGraph3D — production-grade 3D force graph.
  *
- * Differences from the generic agentic-kg-pipeline drop-in:
- *   - Node drag enabled, smoother orbit controls (not trackball).
- *   - Fly-to-node on click, fit-to-view on data load + on-demand reset.
- *   - Cursor-following hover tooltip instead of pinned bottom-left.
- *   - Tailwind-themed overlays (legend, header) instead of inline styles.
- *   - Edge color carries `primary_initiative` (Musashi's 3 + Feint).
- *   - Color fallback chain on nodes so nothing is gray-by-default.
+ * Combines:
+ *  - Smooth mechanics (orbit controls, drag enabled, tuned d3 layout)
+ *  - Hover-to-highlight subgraph (dim non-connected; brighten neighbors)
+ *  - Cached three.js node rendering with sprite labels on high-degree nodes
+ *  - Fullscreen toggle (Esc to exit), refresh button, fit + reset cameras
+ *  - Cursor-following hover tooltip
+ *  - Edge color carries an arbitrary "initiative" (Musashi's 3 + Feint by default)
+ *  - Color fallback chain so nothing is gray-by-default
  *
- * Schema contract: matches assets/kg_schema.json — adds optional
- * `primary_initiative` on edges and `palette.edges` for edge color overrides.
+ * Schema: assets/kg_schema.json + optional `palette.edges` for edge colors.
  */
 
 import {
@@ -24,10 +24,18 @@ import {
   type MouseEvent as ReactMouseEvent,
 } from 'react';
 import dynamic from 'next/dynamic';
-import { Maximize2, RotateCcw } from 'lucide-react';
+import {
+  Maximize2,
+  Minimize2,
+  RefreshCw,
+  RotateCcw,
+  Focus,
+} from 'lucide-react';
 import { cn } from '@/lib/utils';
 
-const ForceGraph3D = dynamic(() => import('react-force-graph-3d'), { ssr: false });
+const ForceGraph3D = dynamic(() => import('react-force-graph-3d'), {
+  ssr: false,
+});
 
 // ── Types ──────────────────────────────────────────────────────────
 
@@ -47,17 +55,19 @@ export interface KGEdge {
   type: string;
   weight?: number;
   frequency?: number;
-  /** Musashi initiative classification — drives edge color. */
-  primary_initiative?: 'lead' | 'sim_counter' | 'delayed_counter' | 'feint' | null;
+  primary_initiative?:
+    | 'lead'
+    | 'sim_counter'
+    | 'delayed_counter'
+    | 'feint'
+    | null;
   [key: string]: unknown;
 }
 
 export interface KGPayload {
   nodes: KGNode[];
   edges: KGEdge[];
-  /** Primary palette: maps node `type` → hex color. */
   palette?: Record<string, string>;
-  /** Optional edge palette: maps `primary_initiative` → hex color. */
   edgePalette?: Record<string, string>;
   metadata?: Record<string, unknown>;
 }
@@ -71,6 +81,7 @@ export interface KnowledgeGraph3DProps {
   height?: number;
   backgroundColor?: string;
   onNodeClick?: (node: KGNode) => void;
+  onRefresh?: () => void;
   showLegend?: boolean;
   showHeader?: boolean;
   className?: string;
@@ -80,7 +91,7 @@ export interface KnowledgeGraph3DProps {
 // ── Defaults ───────────────────────────────────────────────────────
 
 const DEFAULT_NODE_PALETTE: Record<string, string> = {
-  // Combat-sport discipline classes (Fight Trainer canonical):
+  // Combat-sport canonical:
   submission: '#a78bfa',
   strike: '#fbbf24',
   takedown: '#38bdf8',
@@ -92,21 +103,31 @@ const DEFAULT_NODE_PALETTE: Record<string, string> = {
   drilled: '#10b981',
   focus: '#a78bfa',
   recommended: '#f59e0b',
-  // Unknown fallback:
+  // Generic agentic-kg fallback (Person, Organization, etc.):
+  Organization: '#c084fc',
+  Person: '#60a5fa',
+  Product: '#4ade80',
+  Concept: '#facc15',
   default: '#94a3b8',
 };
 
 const DEFAULT_EDGE_PALETTE: Record<string, string> = {
-  // Musashi's 3 + Feint:
-  lead: '#f59e0b', // amber — initiative of attack
-  sim_counter: '#a78bfa', // violet — meet on the same beat
-  delayed_counter: '#10b981', // emerald — counter on recovery
-  feint: '#fb7185', // rose — deception
-  // Unclassified:
-  default: '#475569', // slate — quiet until evidence accrues
+  lead: '#f59e0b',
+  sim_counter: '#a78bfa',
+  delayed_counter: '#10b981',
+  feint: '#fb7185',
+  default: '#475569',
 };
 
-// Stable hash → hue so unknown node types still get a unique non-gray color.
+const DIM_NODE_COLOR = '#1f2937';
+const DIM_EDGE_COLOR = '#0f172a';
+const NEUTRAL_EDGE_COLOR = '#334155';
+const HIGHLIGHT_EDGE_COLOR = '#cbd5e1';
+
+const LARGE_NODE_THRESHOLD = 140;
+const LARGE_EDGE_THRESHOLD = 260;
+const MAX_ALWAYS_LABELED_NODES = 18;
+
 function hashHue(s: string): number {
   let h = 0;
   for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) | 0;
@@ -116,8 +137,9 @@ function fallbackColor(seed: string): string {
   return `hsl(${hashHue(seed)} 65% 60%)`;
 }
 
-const LARGE_NODE_THRESHOLD = 140;
-const LARGE_EDGE_THRESHOLD = 260;
+function getNodeId(n: string | { id: string }): string {
+  return typeof n === 'string' ? n : n.id;
+}
 
 // ── Component ──────────────────────────────────────────────────────
 
@@ -130,6 +152,7 @@ export function KnowledgeGraph3D({
   height = 640,
   backgroundColor = '#020617',
   onNodeClick,
+  onRefresh,
   showLegend = true,
   showHeader = true,
   className = '',
@@ -140,18 +163,44 @@ export function KnowledgeGraph3D({
   const [error, setError] = useState<string>('');
   const [hidden, setHidden] = useState<Set<string>>(new Set());
   const [hovered, setHovered] = useState<KGNode | null>(null);
-  const [tooltipPos, setTooltipPos] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
+  const [tooltipPos, setTooltipPos] = useState<{ x: number; y: number }>({
+    x: 0,
+    y: 0,
+  });
   const [size, setSize] = useState({ width: 800, height });
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  const [refreshNonce, setRefreshNonce] = useState(0);
   const containerRef = useRef<HTMLDivElement>(null);
-  // react-force-graph-3d's ref is loosely typed — we cast at the call sites.
   const graphRef = useRef<unknown>(null);
 
+  // Three.js + sprite-text caches — loaded lazily on first node render.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const threeModuleRef = useRef<any>(null);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const spriteModuleRef = useRef<any>(null);
+  const objectCacheRef = useRef<Map<string, object>>(new Map());
+  const geometryCacheRef = useRef<Map<number, object>>(new Map());
+  const materialCacheRef = useRef<Map<string, object>>(new Map());
+
+  // Hover highlight state (refs so repaints don't restart layout).
+  const highlightNodesRef = useRef<Set<string>>(new Set());
+  const highlightLinksRef = useRef<Set<string>>(new Set());
+  const lastHoveredIdRef = useRef<string | null>(null);
+
   const nodePalette = useMemo(
-    () => ({ ...DEFAULT_NODE_PALETTE, ...(payload?.palette ?? {}), ...(palette ?? {}) }),
+    () => ({
+      ...DEFAULT_NODE_PALETTE,
+      ...(payload?.palette ?? {}),
+      ...(palette ?? {}),
+    }),
     [palette, payload?.palette],
   );
   const edgeInitiativePalette = useMemo(
-    () => ({ ...DEFAULT_EDGE_PALETTE, ...(payload?.edgePalette ?? {}), ...(edgePalette ?? {}) }),
+    () => ({
+      ...DEFAULT_EDGE_PALETTE,
+      ...(payload?.edgePalette ?? {}),
+      ...(edgePalette ?? {}),
+    }),
     [edgePalette, payload?.edgePalette],
   );
 
@@ -160,6 +209,7 @@ export function KnowledgeGraph3D({
     if (data) {
       setPayload(data);
       setLoading(false);
+      objectCacheRef.current.clear();
       return;
     }
     if (!fetchUrl) return;
@@ -179,6 +229,7 @@ export function KnowledgeGraph3D({
           throw new Error('Response missing nodes/edges arrays');
         }
         setPayload(json);
+        objectCacheRef.current.clear();
       })
       .catch((e) => {
         if (cancelled) return;
@@ -190,20 +241,33 @@ export function KnowledgeGraph3D({
     return () => {
       cancelled = true;
     };
-  }, [data, fetchUrl, refreshKey, authHeader]);
+  }, [data, fetchUrl, refreshKey, authHeader, refreshNonce]);
 
   // ── Responsive sizing ──
   useEffect(() => {
     if (!containerRef.current) return;
     const obs = new ResizeObserver((entries) => {
       for (const entry of entries) {
-        const w = entry.contentRect.width;
-        if (w > 0) setSize((s) => ({ ...s, width: w }));
+        const w = Math.floor(entry.contentRect.width);
+        const h = Math.max(420, Math.floor(entry.contentRect.height));
+        setSize((s) =>
+          s.width === w && s.height === h ? s : { width: w, height: h },
+        );
       }
     });
     obs.observe(containerRef.current);
     return () => obs.disconnect();
-  }, []);
+  }, [isFullscreen]);
+
+  // ── Esc to exit fullscreen ──
+  useEffect(() => {
+    if (!isFullscreen) return;
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setIsFullscreen(false);
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, [isFullscreen]);
 
   // ── Build derived data ──
   const graphData = useMemo(() => {
@@ -217,23 +281,13 @@ export function KnowledgeGraph3D({
       degree[e.target] = (degree[e.target] ?? 0) + 1;
     }
 
-    const colorFor = (n: KGNode): string => {
-      const explicit = nodePalette[n.type];
-      if (explicit) return explicit;
-      // Fallback chain so no node is ever gray-by-default.
-      const sportProp =
-        typeof n.props?.sport === 'string' ? (n.props.sport as string) : '';
-      if (sportProp && nodePalette[sportProp]) return nodePalette[sportProp];
-      return fallbackColor(n.type || n.id);
-    };
-
     return {
       nodes: visibleNodes.map((n) => ({
         ...n,
+        degree: degree[n.id] ?? 0,
         val:
           Math.max(2.5, Math.min(9, 2.5 + Math.sqrt(degree[n.id] ?? 0) * 0.9)) *
           (n.canonical ? 1.4 : 1),
-        color: colorFor(n),
       })),
       links: payload.edges
         .filter((e) => visibleIds.has(e.source) && visibleIds.has(e.target))
@@ -244,17 +298,44 @@ export function KnowledgeGraph3D({
           weight: e.weight ?? 1,
           frequency: e.frequency,
           primary_initiative: e.primary_initiative ?? null,
-          color:
-            (e.primary_initiative &&
-              edgeInitiativePalette[e.primary_initiative]) ||
-            edgeInitiativePalette.default,
         })),
     };
-  }, [payload, hidden, nodePalette, edgeInitiativePalette]);
+  }, [payload, hidden]);
 
   const isLarge =
     graphData.nodes.length > LARGE_NODE_THRESHOLD ||
     graphData.links.length > LARGE_EDGE_THRESHOLD;
+
+  // ── Adjacency map for instant hover lookup ──
+  const adjacency = useMemo(() => {
+    const nodes = new Map<string, Set<string>>();
+    const links = new Map<string, Set<string>>();
+    for (const n of graphData.nodes) {
+      nodes.set(n.id, new Set([n.id]));
+      links.set(n.id, new Set());
+    }
+    for (const l of graphData.links) {
+      const s = getNodeId(l.source as string);
+      const t = getNodeId(l.target as string);
+      const key = `${s}::${t}`;
+      nodes.get(s)?.add(t);
+      nodes.get(t)?.add(s);
+      links.get(s)?.add(key);
+      links.get(t)?.add(key);
+    }
+    return { nodes, links };
+  }, [graphData.nodes, graphData.links]);
+
+  // ── Top-degree nodes get permanent sprite labels ──
+  const labeledNodeIds = useMemo(() => {
+    if (isLarge) return new Set<string>();
+    return new Set(
+      [...graphData.nodes]
+        .sort((a, b) => (b.degree ?? 0) - (a.degree ?? 0))
+        .slice(0, MAX_ALWAYS_LABELED_NODES)
+        .map((n) => n.id),
+    );
+  }, [graphData.nodes, isLarge]);
 
   const typeCounts = useMemo(() => {
     const c: Record<string, number> = {};
@@ -263,24 +344,179 @@ export function KnowledgeGraph3D({
     return c;
   }, [payload]);
 
-  const toggleType = useCallback((t: string) => {
-    setHidden((prev) => {
-      const next = new Set(prev);
-      if (next.has(t)) next.delete(t);
-      else next.add(t);
-      return next;
-    });
+  // ── Lazy-load three + sprite-text for custom node objects ──
+  const ensureModules = useCallback(() => {
+    if (!threeModuleRef.current) {
+      // Dynamic require so SSR doesn't try to load three.
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      threeModuleRef.current = require('three');
+    }
+    if (!spriteModuleRef.current) {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      spriteModuleRef.current = require('three-spritetext').default;
+    }
+    return {
+      THREE: threeModuleRef.current,
+      SpriteText: spriteModuleRef.current,
+    };
   }, []);
 
-  // ── Camera controls ──
-  function fitView() {
+  const colorFor = useCallback(
+    (node: KGNode): string => {
+      const direct = nodePalette[node.type];
+      if (direct) return direct;
+      const sportProp =
+        typeof node.props?.sport === 'string'
+          ? (node.props.sport as string)
+          : '';
+      if (sportProp && nodePalette[sportProp]) return nodePalette[sportProp];
+      return fallbackColor(node.type || node.id);
+    },
+    [nodePalette],
+  );
+
+  const getMaterial = useCallback(
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (THREE: any, color: string) => {
+      const cache = materialCacheRef.current;
+      if (!cache.has(color)) {
+        cache.set(
+          color,
+          new THREE.MeshLambertMaterial({
+            color,
+            transparent: true,
+            opacity: 0.9,
+          }),
+        );
+      }
+      return cache.get(color);
+    },
+    [],
+  );
+
+  const getGeometry = useCallback(
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (THREE: any, radius: number) => {
+      const r = Number(radius.toFixed(1));
+      const cache = geometryCacheRef.current;
+      if (!cache.has(r)) {
+        cache.set(r, new THREE.SphereGeometry(r, 8, 6));
+      }
+      return cache.get(r);
+    },
+    [],
+  );
+
+  const nodeThreeObject = useCallback(
+    (node: object) => {
+      const n = node as KGNode & { degree: number; val: number };
+      const cache = objectCacheRef.current;
+      if (cache.has(n.id)) return cache.get(n.id)!;
+
+      const { THREE, SpriteText } = ensureModules();
+      const group = new THREE.Group();
+      const sphere = new THREE.Mesh(
+        getGeometry(THREE, n.val),
+        getMaterial(THREE, colorFor(n)),
+      );
+      sphere.name = 'sphere';
+      group.add(sphere);
+
+      const shouldLabel =
+        labeledNodeIds.has(n.id) || (!isLarge && (n.degree ?? 0) >= 3);
+      if (shouldLabel) {
+        const sprite = new SpriteText(n.name);
+        sprite.color = '#e2e8f0';
+        sprite.textHeight = Math.max(2.2, n.val * 0.65);
+        sprite.position.y = -(n.val + 3);
+        sprite.material.depthWrite = false;
+        group.add(sprite);
+      }
+
+      cache.set(n.id, group);
+      return group;
+    },
+    [colorFor, ensureModules, getGeometry, getMaterial, isLarge, labeledNodeIds],
+  );
+
+  // ── Hover handler: dim non-connected, brighten neighborhood ──
+  const handleNodeHover = useCallback(
+    (n: object | null) => {
+      const node = n as KGNode | null;
+      const id = node?.id ?? null;
+      if (lastHoveredIdRef.current === id) return;
+      lastHoveredIdRef.current = id;
+      setHovered(node);
+      if (!node) {
+        highlightNodesRef.current = new Set();
+        highlightLinksRef.current = new Set();
+      } else {
+        highlightNodesRef.current = new Set(
+          adjacency.nodes.get(node.id) ?? [node.id],
+        );
+        highlightLinksRef.current = new Set(adjacency.links.get(node.id) ?? []);
+      }
+      const g = graphRef.current as { refresh?: () => void } | null;
+      g?.refresh?.();
+    },
+    [adjacency.links, adjacency.nodes],
+  );
+
+  // ── Color resolvers passed to ForceGraph3D ──
+  const resolveNodeColor = useCallback(
+    (n: object) => {
+      const node = n as KGNode;
+      const highlights = highlightNodesRef.current;
+      if (highlights.size === 0) return colorFor(node);
+      return highlights.has(node.id) ? colorFor(node) : DIM_NODE_COLOR;
+    },
+    [colorFor],
+  );
+
+  const resolveLinkColor = useCallback(
+    (l: object) => {
+      const link = l as KGEdge;
+      const key = `${getNodeId(link.source as string)}::${getNodeId(link.target as string)}`;
+      const highlights = highlightLinksRef.current;
+      const initiativeColor =
+        (link.primary_initiative &&
+          edgeInitiativePalette[link.primary_initiative]) ||
+        null;
+      if (highlights.size === 0) {
+        return initiativeColor ?? NEUTRAL_EDGE_COLOR;
+      }
+      if (highlights.has(key)) {
+        return initiativeColor ?? HIGHLIGHT_EDGE_COLOR;
+      }
+      return DIM_EDGE_COLOR;
+    },
+    [edgeInitiativePalette],
+  );
+
+  const resolveLinkWidth = useCallback(
+    (l: object) => {
+      const link = l as KGEdge;
+      const key = `${getNodeId(link.source as string)}::${getNodeId(link.target as string)}`;
+      const highlights = highlightLinksRef.current;
+      const w = link.weight ?? 1;
+      if (highlights.size === 0) {
+        return Math.max(0.6, w * (isLarge ? 1.0 : 1.6));
+      }
+      return highlights.has(key) ? Math.max(1.4, w * 2.4) : 0.2;
+    },
+    [isLarge],
+  );
+
+  // ── Camera helpers ──
+  function fitView(ms = 800) {
     const g = graphRef.current as
       | { zoomToFit?: (ms?: number, padding?: number) => void }
       | null;
-    g?.zoomToFit?.(800, 60);
+    g?.zoomToFit?.(ms, 60);
   }
-
-  function flyToNode(node: KGNode & { x?: number; y?: number; z?: number }) {
+  function flyToNode(
+    node: KGNode & { x?: number; y?: number; z?: number },
+  ) {
     const g = graphRef.current as
       | {
           cameraPosition?: (
@@ -290,9 +526,8 @@ export function KnowledgeGraph3D({
           ) => void;
         }
       | null;
-    if (!g?.cameraPosition || node.x == null || node.y == null || node.z == null) {
+    if (!g?.cameraPosition || node.x == null || node.y == null || node.z == null)
       return;
-    }
     const dist = 80;
     const r = Math.hypot(node.x, node.y, node.z) || 1;
     g.cameraPosition(
@@ -306,9 +541,8 @@ export function KnowledgeGraph3D({
     );
   }
 
-  // Auto-fit once layout has cooled.
   const handleEngineStop = useCallback(() => {
-    fitView();
+    fitView(600);
   }, []);
 
   const handleNodeClick = useCallback(
@@ -320,15 +554,27 @@ export function KnowledgeGraph3D({
     [onNodeClick],
   );
 
-  // ── Hover tooltip follows cursor ──
   function handleMouseMove(e: ReactMouseEvent<HTMLDivElement>) {
     const rect = containerRef.current?.getBoundingClientRect();
     if (!rect) return;
     setTooltipPos({ x: e.clientX - rect.left, y: e.clientY - rect.top });
   }
 
-  // ── Render ──
+  function toggleType(t: string) {
+    setHidden((prev) => {
+      const next = new Set(prev);
+      next.has(t) ? next.delete(t) : next.add(t);
+      return next;
+    });
+  }
 
+  function refresh() {
+    objectCacheRef.current.clear();
+    if (onRefresh) onRefresh();
+    setRefreshNonce((n) => n + 1);
+  }
+
+  // ── States ──
   if (loading) {
     return (
       <div
@@ -364,174 +610,228 @@ export function KnowledgeGraph3D({
       <div
         ref={containerRef}
         className={cn(
-          'flex items-center justify-center rounded-md border border-border bg-background/40 text-sm text-muted-foreground',
+          'flex items-center justify-center rounded-md border border-border bg-background/40 p-6 text-center text-sm text-muted-foreground',
           className,
         )}
         style={{ height, background: backgroundColor }}
       >
-        No graph data yet — run a fight breakdown and edges will start
-        accreting here.
+        No graph data yet — run a fight breakdown and edges will accrete here.
       </div>
     );
   }
 
+  // ── Wrapper styling: fullscreen vs inline ──
+  const wrapperClass = cn(
+    isFullscreen
+      ? 'fixed inset-0 z-50 flex flex-col bg-slate-950'
+      : 'relative overflow-hidden rounded-md',
+    className,
+  );
+
   return (
     <div
-      ref={containerRef}
-      className={cn('relative overflow-hidden rounded-md', className)}
-      style={{ height, background: backgroundColor }}
-      onMouseMove={handleMouseMove}
+      className={wrapperClass}
+      style={isFullscreen ? undefined : { height, background: backgroundColor }}
     >
-      {/* Header */}
-      {showHeader && (
-        <div className="absolute left-3 top-3 z-10 rounded-md border border-white/10 bg-slate-950/80 px-3 py-2 text-xs text-slate-100 backdrop-blur">
-          <div className="font-semibold">
-            {(payload.metadata?.project as string) ?? 'Knowledge Graph'}
+      {/* ── Top toolbar ── */}
+      <div
+        className={cn(
+          'flex items-center justify-between gap-3',
+          isFullscreen
+            ? 'border-b border-white/10 bg-slate-950/95 px-4 py-3 backdrop-blur'
+            : 'absolute left-3 right-3 top-3 z-20',
+        )}
+      >
+        {showHeader && (
+          <div
+            className={cn(
+              'flex items-center gap-2 text-xs text-slate-200',
+              isFullscreen
+                ? ''
+                : 'rounded-md border border-white/10 bg-slate-950/80 px-3 py-2 backdrop-blur',
+            )}
+          >
+            <span className="font-semibold">
+              {(payload.metadata?.project as string) ?? 'Knowledge Graph'}
+            </span>
+            <span className="text-slate-400">
+              · {graphData.nodes.length} nodes · {graphData.links.length} edges
+            </span>
+            {isLarge ? (
+              <span className="rounded-full border border-amber-700/60 bg-amber-950/40 px-2 py-0.5 text-[10px] text-amber-300">
+                large mode
+              </span>
+            ) : null}
+            {isFullscreen ? (
+              <span className="text-slate-500">(Esc to exit)</span>
+            ) : null}
           </div>
-          <div className="mt-0.5 text-[11px] text-slate-400">
-            {graphData.nodes.length} nodes · {graphData.links.length} edges
-            {isLarge ? ' · perf mode' : ''}
-          </div>
+        )}
+        <div className="flex items-center gap-1.5">
+          <button
+            type="button"
+            onClick={refresh}
+            title="Refresh graph data"
+            className="rounded-md border border-white/10 bg-slate-950/80 p-1.5 text-slate-100 backdrop-blur transition-colors hover:bg-slate-900"
+          >
+            <RefreshCw className="h-4 w-4" />
+          </button>
+          <button
+            type="button"
+            onClick={() => fitView(800)}
+            title="Fit to view"
+            className="rounded-md border border-white/10 bg-slate-950/80 p-1.5 text-slate-100 backdrop-blur transition-colors hover:bg-slate-900"
+          >
+            <Focus className="h-4 w-4" />
+          </button>
+          <button
+            type="button"
+            onClick={() => fitView(0)}
+            title="Reset camera"
+            className="rounded-md border border-white/10 bg-slate-950/80 p-1.5 text-slate-100 backdrop-blur transition-colors hover:bg-slate-900"
+          >
+            <RotateCcw className="h-4 w-4" />
+          </button>
+          <button
+            type="button"
+            onClick={() => setIsFullscreen((v) => !v)}
+            title={isFullscreen ? 'Exit fullscreen' : 'Fullscreen'}
+            className="rounded-md border border-white/10 bg-slate-950/80 p-1.5 text-slate-100 backdrop-blur transition-colors hover:bg-slate-900"
+          >
+            {isFullscreen ? (
+              <Minimize2 className="h-4 w-4" />
+            ) : (
+              <Maximize2 className="h-4 w-4" />
+            )}
+          </button>
         </div>
-      )}
-
-      {/* Camera controls */}
-      <div className="absolute right-3 top-3 z-10 flex flex-col gap-1.5">
-        <button
-          type="button"
-          onClick={fitView}
-          title="Fit to view"
-          className="rounded-md border border-white/10 bg-slate-950/80 p-1.5 text-slate-100 backdrop-blur transition-colors hover:bg-slate-900"
-        >
-          <Maximize2 className="h-4 w-4" />
-        </button>
-        <button
-          type="button"
-          onClick={() => {
-            const g = graphRef.current as
-              | { zoomToFit?: (ms?: number, padding?: number) => void }
-              | null;
-            g?.zoomToFit?.(0, 60);
-          }}
-          title="Reset camera"
-          className="rounded-md border border-white/10 bg-slate-950/80 p-1.5 text-slate-100 backdrop-blur transition-colors hover:bg-slate-900"
-        >
-          <RotateCcw className="h-4 w-4" />
-        </button>
       </div>
 
-      {/* Legend */}
-      {showLegend && Object.keys(typeCounts).length > 0 && (
-        <div className="absolute bottom-3 right-3 z-10 max-h-[55%] overflow-y-auto rounded-md border border-white/10 bg-slate-950/80 px-3 py-2 text-[11px] text-slate-100 backdrop-blur">
-          <div className="mb-1.5 text-[10px] font-semibold uppercase tracking-wider text-slate-400">
-            Node types · click to toggle
-          </div>
-          {Object.keys(typeCounts).sort().map((t) => {
-            const color =
-              nodePalette[t] ?? fallbackColor(t);
-            return (
-              <button
-                key={t}
-                type="button"
-                onClick={() => toggleType(t)}
-                className={cn(
-                  'flex w-full items-center gap-2 py-0.5 text-left',
-                  hidden.has(t) ? 'opacity-40' : 'opacity-100',
-                )}
-              >
-                <span
-                  className="h-2.5 w-2.5 rounded-full"
-                  style={{ background: color }}
-                />
-                <span>{t}</span>
-                <span className="ml-auto text-slate-500">{typeCounts[t]}</span>
-              </button>
-            );
-          })}
+      {/* ── Canvas + overlays ── */}
+      <div
+        ref={containerRef}
+        className={cn(
+          'relative overflow-hidden',
+          isFullscreen ? 'flex-1' : 'h-full w-full',
+        )}
+        onMouseMove={handleMouseMove}
+        style={!isFullscreen ? { background: backgroundColor } : undefined}
+      >
+        {/* Legend */}
+        {showLegend && Object.keys(typeCounts).length > 0 && (
+          <div className="absolute bottom-3 right-3 z-10 max-h-[60%] overflow-y-auto rounded-md border border-white/10 bg-slate-950/85 px-3 py-2 text-[11px] text-slate-100 backdrop-blur">
+            <div className="mb-1.5 text-[10px] font-semibold uppercase tracking-wider text-slate-400">
+              Nodes · click to toggle
+            </div>
+            {Object.keys(typeCounts)
+              .sort()
+              .map((t) => {
+                const color = nodePalette[t] ?? fallbackColor(t);
+                return (
+                  <button
+                    key={t}
+                    type="button"
+                    onClick={() => toggleType(t)}
+                    className={cn(
+                      'flex w-full items-center gap-2 py-0.5 text-left',
+                      hidden.has(t) ? 'opacity-40' : 'opacity-100',
+                    )}
+                  >
+                    <span
+                      className="h-2.5 w-2.5 rounded-full"
+                      style={{ background: color }}
+                    />
+                    <span>{t}</span>
+                    <span className="ml-auto text-slate-500">
+                      {typeCounts[t]}
+                    </span>
+                  </button>
+                );
+              })}
 
-          <div className="mt-3 mb-1 text-[10px] font-semibold uppercase tracking-wider text-slate-400">
-            Edge initiative
+            <div className="mt-3 mb-1 text-[10px] font-semibold uppercase tracking-wider text-slate-400">
+              Edges · initiative
+            </div>
+            {(['lead', 'sim_counter', 'delayed_counter', 'feint'] as const).map(
+              (k) => {
+                const labels: Record<string, string> = {
+                  lead: 'Lead',
+                  sim_counter: 'Sim Counter',
+                  delayed_counter: 'Delayed Counter',
+                  feint: 'Feint',
+                };
+                return (
+                  <div key={k} className="flex items-center gap-2 py-0.5">
+                    <span
+                      className="h-2.5 w-2.5 rounded-sm"
+                      style={{ background: edgeInitiativePalette[k] }}
+                    />
+                    <span>{labels[k]}</span>
+                  </div>
+                );
+              },
+            )}
           </div>
-          {(['lead', 'sim_counter', 'delayed_counter', 'feint'] as const).map(
-            (k) => {
-              const labels = {
-                lead: 'Lead',
-                sim_counter: 'Sim Counter',
-                delayed_counter: 'Delayed Counter',
-                feint: 'Feint',
-              };
-              return (
-                <div key={k} className="flex items-center gap-2 py-0.5">
-                  <span
-                    className="h-2.5 w-2.5 rounded-sm"
-                    style={{ background: edgeInitiativePalette[k] }}
-                  />
-                  <span>{labels[k]}</span>
-                </div>
-              );
-            },
-          )}
-        </div>
-      )}
+        )}
 
-      {/* Hover tooltip — follows cursor */}
-      {hovered && (
-        <div
-          className="pointer-events-none absolute z-20 max-w-xs rounded-md border border-white/15 bg-slate-950/95 px-3 py-2 text-xs text-slate-100 shadow-lg backdrop-blur"
-          style={{
-            left: Math.min(tooltipPos.x + 14, size.width - 280),
-            top: Math.max(tooltipPos.y - 16, 8),
-          }}
-        >
-          <div className="font-semibold">{hovered.name}</div>
-          <div className="mt-0.5 text-[11px] text-slate-400">
-            {hovered.type}
-            {hovered.canonical ? ' · canonical' : ''}
+        {/* Cursor-following hover tooltip */}
+        {hovered && (
+          <div
+            className="pointer-events-none absolute z-20 max-w-xs rounded-md border border-white/15 bg-slate-950/95 px-3 py-2 text-xs text-slate-100 shadow-lg backdrop-blur"
+            style={{
+              left: Math.min(tooltipPos.x + 14, size.width - 280),
+              top: Math.max(tooltipPos.y - 16, 8),
+            }}
+          >
+            <div className="font-semibold">{hovered.name}</div>
+            <div className="mt-0.5 text-[11px] text-slate-400">
+              {hovered.type}
+              {hovered.canonical ? ' · canonical' : ''}
+            </div>
+            {hovered.subtitle ? (
+              <div className="mt-1 text-[11px]">{hovered.subtitle}</div>
+            ) : null}
           </div>
-          {hovered.subtitle ? (
-            <div className="mt-1 text-[11px]">{hovered.subtitle}</div>
-          ) : null}
-        </div>
-      )}
+        )}
 
-      {/* The canvas itself */}
-      <ForceGraph3D
-        ref={graphRef as unknown as React.MutableRefObject<undefined>}
-        graphData={graphData}
-        width={size.width}
-        height={height}
-        backgroundColor={backgroundColor}
-        // ─── Controls: orbit feels natural; trackball had snap-to-axis stickiness ───
-        controlType="orbit"
-        enableNodeDrag
-        enableNavigationControls
-        showNavInfo={false}
-        // ─── Node + edge styling ───
-        nodeOpacity={0.95}
-        nodeResolution={isLarge ? 4 : 8}
-        nodeColor={(n: object) => (n as KGNode & { color: string }).color}
-        nodeLabel={() => ''} // we render our own cursor-following tooltip
-        linkOpacity={isLarge ? 0.4 : 0.55}
-        linkWidth={(l: object) =>
-          Math.max(0.6, ((l as KGEdge).weight ?? 1) * 1.6)
-        }
-        linkColor={(l: object) => (l as KGEdge & { color: string }).color}
-        linkDirectionalParticles={(l: object) =>
-          ((l as KGEdge).weight ?? 0) > 0.6 ? 2 : 0
-        }
-        linkDirectionalParticleSpeed={0.004}
-        linkDirectionalParticleWidth={1.5}
-        linkResolution={isLarge ? 2 : 4}
-        // ─── Layout — tuned for responsive feel without endless wobble ───
-        warmupTicks={20}
-        cooldownTicks={isLarge ? 60 : 120}
-        d3AlphaDecay={0.025}
-        d3VelocityDecay={0.28}
-        // ─── Interactions ───
-        onEngineStop={handleEngineStop}
-        onNodeHover={(n: object | null) => setHovered(n as KGNode | null)}
-        onNodeClick={handleNodeClick}
-      />
+        <ForceGraph3D
+          ref={graphRef as unknown as React.MutableRefObject<undefined>}
+          graphData={graphData}
+          width={size.width}
+          height={isFullscreen ? size.height : height}
+          backgroundColor={backgroundColor}
+          // Smooth controls — orbit, drag enabled, longer cooldown
+          controlType="orbit"
+          enableNodeDrag
+          enableNavigationControls
+          showNavInfo={false}
+          // Custom three.js node objects (cached spheres + sprite labels)
+          nodeThreeObject={nodeThreeObject as (node: object) => object}
+          nodeThreeObjectExtend={false}
+          nodeColor={resolveNodeColor}
+          nodeOpacity={0.95}
+          nodeResolution={isLarge ? 4 : 8}
+          nodeLabel={() => ''}
+          // Edges
+          linkColor={resolveLinkColor}
+          linkOpacity={isLarge ? 0.45 : 0.6}
+          linkWidth={resolveLinkWidth}
+          linkResolution={isLarge ? 2 : 4}
+          linkDirectionalParticles={(l: object) =>
+            ((l as KGEdge).weight ?? 0) > 0.6 ? 2 : 0
+          }
+          linkDirectionalParticleSpeed={0.004}
+          linkDirectionalParticleWidth={1.6}
+          // Layout — settles smoothly without freezing
+          warmupTicks={20}
+          cooldownTicks={isLarge ? 60 : 120}
+          d3AlphaDecay={0.025}
+          d3VelocityDecay={0.28}
+          onEngineStop={handleEngineStop}
+          onNodeHover={handleNodeHover}
+          onNodeClick={handleNodeClick}
+        />
+      </div>
     </div>
   );
 }
