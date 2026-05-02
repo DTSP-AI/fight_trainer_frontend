@@ -107,6 +107,59 @@ function fmtTs(s: number): string {
   return `${m}:${String(sec).padStart(2, '0')}`;
 }
 
+// Mirrors the milestones written in backend/app/graph/analysis_graph.py.
+// Derived client-side because `current_step` is set on LangGraph state but
+// is not persisted to fight_analyses (no DB column today). progress_percent
+// IS persisted, so the percentage is authoritative.
+function deriveStepLabel(status: string, pct: number): string {
+  if (status === 'failed') return 'Pipeline failed';
+  if (status === 'completed' || pct >= 100) return 'Complete';
+  if (pct < 15) return 'Queued';
+  if (pct < 30) return 'Fetching YouTube info & transcript';
+  if (pct < 35) return 'Identifying fighters';
+  if (pct < 45) return 'Verifying fight against Wikipedia & Sherdog';
+  if (pct < 50) return 'Verification complete';
+  if (pct < 80) return 'Building the breakdown';
+  if (pct < 90) return 'Validating against transcript';
+  if (pct < 100) return 'Refining the report';
+  return 'Complete';
+}
+
+function ProgressBar({
+  pct,
+  status,
+}: {
+  pct: number;
+  status: string;
+}) {
+  const clamped = Math.max(0, Math.min(100, pct));
+  const failed = status === 'failed';
+  const done = status === 'completed' || clamped >= 100;
+  const barColor = failed
+    ? 'bg-destructive'
+    : done
+      ? 'bg-emerald-500'
+      : 'bg-primary';
+  const animated = !done && !failed;
+  return (
+    <div
+      className="relative h-2 w-full overflow-hidden rounded-full bg-muted"
+      role="progressbar"
+      aria-valuenow={clamped}
+      aria-valuemin={0}
+      aria-valuemax={100}
+    >
+      <div
+        className={`h-full rounded-full transition-[width] duration-500 ease-out ${barColor}`}
+        style={{ width: `${clamped}%` }}
+      />
+      {animated ? (
+        <div className="pointer-events-none absolute inset-0 animate-pulse bg-gradient-to-r from-transparent via-white/10 to-transparent" />
+      ) : null}
+    </div>
+  );
+}
+
 function priorityClass(p: number): string {
   // 1=highest (red), 5=lowest (muted)
   if (p <= 1) return 'border-primary text-primary glow-ring';
@@ -172,7 +225,10 @@ export default function AnalysisDetailPage() {
   const report = (data.report ?? null) as FightReport | null;
   const lens = data.student_lens as { student_full_name?: string } | null;
   const progressPct = data.progress_pct ?? data.progress_percent ?? 0;
-  const currentStep = data.current_step;
+  // current_step is not yet persisted to DB — fall back to a deterministic
+  // label derived from status + progress_percent (mirrors backend milestones).
+  const currentStep =
+    data.current_step ?? deriveStepLabel(data.status, progressPct);
 
   return (
     <div className="mx-auto max-w-5xl space-y-6">
@@ -216,13 +272,24 @@ export default function AnalysisDetailPage() {
           <CardHeader>
             <CardTitle className="text-base">Status</CardTitle>
           </CardHeader>
-          <CardContent className="space-y-2 text-sm">
-            <div className="flex justify-between"><span>Status</span><span>{data.status}</span></div>
-            <div className="flex justify-between"><span>Progress</span><span>{progressPct}%</span></div>
-            {currentStep ? (
-              <div className="text-xs text-muted-foreground">{currentStep}</div>
+          <CardContent className="space-y-3 text-sm">
+            <div>
+              <div className="mb-1.5 flex items-center justify-between">
+                <span className="font-medium capitalize">{data.status}</span>
+                <span className="font-mono text-xs text-muted-foreground">
+                  {progressPct}%
+                </span>
+              </div>
+              <ProgressBar pct={progressPct} status={data.status} />
+              {currentStep ? (
+                <div className="mt-1.5 text-xs text-muted-foreground">
+                  {currentStep}
+                </div>
+              ) : null}
+            </div>
+            {data.sport ? (
+              <div className="flex justify-between"><span>Sport</span><span>{data.sport}</span></div>
             ) : null}
-            {data.sport ? <div className="flex justify-between"><span>Sport</span><span>{data.sport}</span></div> : null}
             {lens?.student_full_name ? (
               <div className="flex justify-between"><span>Lensed for</span><span>{lens.student_full_name}</span></div>
             ) : null}
@@ -237,14 +304,31 @@ export default function AnalysisDetailPage() {
 
       {!report ? (
         <Card>
-          <CardContent className="py-10">
-            <LoadingState
-              label={
-                data.status === 'failed'
-                  ? 'Pipeline failed — see status panel'
-                  : `Pipeline running (${progressPct}%) — ${currentStep ?? 'in progress'}`
-              }
-            />
+          <CardContent className="space-y-4 py-8">
+            <div className="space-y-2">
+              <div className="flex items-center justify-between text-sm">
+                <span className="font-semibold capitalize">
+                  {data.status === 'failed'
+                    ? 'Pipeline failed'
+                    : currentStep}
+                </span>
+                <span className="font-mono text-xs text-muted-foreground">
+                  {progressPct}%
+                </span>
+              </div>
+              <ProgressBar pct={progressPct} status={data.status} />
+            </div>
+            {data.status !== 'failed' ? (
+              <p className="text-xs text-muted-foreground">
+                The breakdown will render here as soon as the analyst
+                finishes. You can leave this tab open — it polls every
+                three seconds.
+              </p>
+            ) : data.error_detail ? (
+              <p className="rounded-md border border-destructive/40 bg-destructive/10 p-3 text-xs text-destructive">
+                {data.error_detail}
+              </p>
+            ) : null}
           </CardContent>
         </Card>
       ) : (
