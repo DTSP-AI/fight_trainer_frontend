@@ -47,6 +47,9 @@ interface Props {
   initiative?: Initiative;
   height?: number;
   className?: string;
+  /** When true, click-a-node opens an edit panel with delete + reclassify
+   *  buttons. Trainer-only callers should set this; student views skip. */
+  editable?: boolean;
 }
 
 export function TechniqueGraphView({
@@ -55,6 +58,7 @@ export function TechniqueGraphView({
   initiative,
   height = 640,
   className,
+  editable = false,
 }: Props) {
   const [nodes, setNodes] = useState<GraphNode[] | null>(null);
   const [edges, setEdges] = useState<GraphEdge[] | null>(null);
@@ -160,6 +164,7 @@ export function TechniqueGraphView({
     });
 
     const mappedEdges = edges.map((e) => ({
+      id: e.id,
       source: e.from_technique_id,
       target: e.to_technique_id,
       type: e.kind,
@@ -188,12 +193,45 @@ export function TechniqueGraphView({
     return <LoadingState label="Loading the graph…" />;
   }
 
+  async function handleEdgeDelete(edgeId: string) {
+    try {
+      await graphApi.deleteEdge(edgeId);
+      setEdges((prev) =>
+        prev ? prev.filter((e) => e.id !== edgeId) : prev,
+      );
+    } catch (err) {
+      const { toast } = await import('sonner');
+      toast.error(describeApiError(err));
+    }
+  }
+
+  async function handleEdgeReclassify(
+    edgeId: string,
+    init: Initiative,
+  ) {
+    try {
+      await graphApi.updateEdge(edgeId, { initiative: init });
+      setEdges((prev) =>
+        prev
+          ? prev.map((e) =>
+              e.id === edgeId ? { ...e, primary_initiative: init } : e,
+            )
+          : prev,
+      );
+    } catch (err) {
+      const { toast } = await import('sonner');
+      toast.error(describeApiError(err));
+    }
+  }
+
   return (
     <KnowledgeGraph3D
       data={payload}
       height={height}
       className={className}
       backgroundColor="#020617"
+      onEdgeDelete={editable ? handleEdgeDelete : undefined}
+      onEdgeReclassify={editable ? handleEdgeReclassify : undefined}
     />
   );
 }

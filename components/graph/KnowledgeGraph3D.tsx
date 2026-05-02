@@ -25,11 +25,14 @@ import {
 } from 'react';
 import dynamic from 'next/dynamic';
 import {
+  Loader2,
   Maximize2,
   Minimize2,
   RefreshCw,
   RotateCcw,
   Focus,
+  Trash2,
+  X,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -72,6 +75,8 @@ export interface KGPayload {
   metadata?: Record<string, unknown>;
 }
 
+export type Initiative = 'lead' | 'sim_counter' | 'delayed_counter' | 'feint';
+
 export interface KnowledgeGraph3DProps {
   data?: KGPayload;
   fetchUrl?: string;
@@ -82,8 +87,17 @@ export interface KnowledgeGraph3DProps {
   backgroundColor?: string;
   onNodeClick?: (node: KGNode) => void;
   onRefresh?: () => void;
+  /** Per-edge delete callback. When provided, the side panel renders a
+   *  trash icon on each edge. Caller handles confirmation + persistence. */
+  onEdgeDelete?: (edgeId: string) => Promise<void> | void;
+  /** Per-edge initiative reclassify callback. When provided, the side
+   *  panel renders an initiative dropdown on each edge. */
+  onEdgeReclassify?: (edgeId: string, initiative: Initiative) => Promise<void> | void;
   showLegend?: boolean;
   showHeader?: boolean;
+  /** Show the slide-in side panel on node click. Default true when any
+   *  edit callback is provided, otherwise false (read-only mode). */
+  showSidePanel?: boolean;
   className?: string;
   authHeader?: string;
 }
@@ -153,16 +167,22 @@ export function KnowledgeGraph3D({
   backgroundColor = '#020617',
   onNodeClick,
   onRefresh,
+  onEdgeDelete,
+  onEdgeReclassify,
   showLegend = true,
   showHeader = true,
+  showSidePanel,
   className = '',
   authHeader,
 }: KnowledgeGraph3DProps) {
+  const sidePanelEnabled =
+    showSidePanel ?? Boolean(onEdgeDelete || onEdgeReclassify);
   const [payload, setPayload] = useState<KGPayload | null>(data ?? null);
   const [loading, setLoading] = useState(!data);
   const [error, setError] = useState<string>('');
   const [hidden, setHidden] = useState<Set<string>>(new Set());
   const [hovered, setHovered] = useState<KGNode | null>(null);
+  const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [tooltipPos, setTooltipPos] = useState<{ x: number; y: number }>({
     x: 0,
     y: 0,
@@ -549,9 +569,12 @@ export function KnowledgeGraph3D({
     (n: object) => {
       const node = n as KGNode & { x?: number; y?: number; z?: number };
       flyToNode(node);
+      if (sidePanelEnabled) {
+        setSelectedNodeId(node.id);
+      }
       onNodeClick?.(node);
     },
-    [onNodeClick],
+    [onNodeClick, sidePanelEnabled],
   );
 
   function handleMouseMove(e: ReactMouseEvent<HTMLDivElement>) {
@@ -774,6 +797,19 @@ export function KnowledgeGraph3D({
           </div>
         )}
 
+        {/* Slide-in side panel — per-node edit + per-edge delete */}
+        {sidePanelEnabled && selectedNodeId && payload ? (
+          <NodeSidePanel
+            node={payload.nodes.find((n) => n.id === selectedNodeId) ?? null}
+            edges={payload.edges}
+            nodes={payload.nodes}
+            edgePalette={edgeInitiativePalette}
+            onClose={() => setSelectedNodeId(null)}
+            onEdgeDelete={onEdgeDelete}
+            onEdgeReclassify={onEdgeReclassify}
+          />
+        ) : null}
+
         {/* Cursor-following hover tooltip */}
         {hovered && (
           <div
@@ -837,3 +873,220 @@ export function KnowledgeGraph3D({
 }
 
 export default KnowledgeGraph3D;
+
+// ── NodeSidePanel ──────────────────────────────────────────────────
+// Slide-in panel showing the selected node's metadata and outbound edges
+// grouped by initiative. Per-edge: reclassify dropdown + delete button.
+// Mirrors the pattern of MW's KnowledgeRelationships.tsx.
+
+const INITIATIVE_LABELS: Record<Initiative | 'unclassified', string> = {
+  lead: 'Lead',
+  sim_counter: 'Simultaneous Counter',
+  delayed_counter: 'Delayed Counter',
+  feint: 'Feint',
+  unclassified: 'Unclassified',
+};
+
+const INITIATIVE_ORDER: Array<Initiative | 'unclassified'> = [
+  'lead',
+  'sim_counter',
+  'delayed_counter',
+  'feint',
+  'unclassified',
+];
+
+function NodeSidePanel({
+  node,
+  edges,
+  nodes,
+  edgePalette,
+  onClose,
+  onEdgeDelete,
+  onEdgeReclassify,
+}: {
+  node: KGNode | null;
+  edges: KGEdge[];
+  nodes: KGNode[];
+  edgePalette: Record<string, string>;
+  onClose: () => void;
+  onEdgeDelete?: (edgeId: string) => Promise<void> | void;
+  onEdgeReclassify?: (
+    edgeId: string,
+    initiative: Initiative,
+  ) => Promise<void> | void;
+}) {
+  const [busyEdgeId, setBusyEdgeId] = useState<string | null>(null);
+  const nodeMap = useMemo(() => {
+    const m = new Map<string, KGNode>();
+    for (const n of nodes) m.set(n.id, n);
+    return m;
+  }, [nodes]);
+
+  if (!node) return null;
+
+  // Outbound + inbound (treat both as "connections" — direction shown in row)
+  const outbound = edges.filter((e) => e.source === node.id);
+  const inbound = edges.filter((e) => e.target === node.id);
+  const grouped: Record<string, Array<{ edge: KGEdge; direction: 'out' | 'in' }>> = {};
+  for (const e of outbound) {
+    const key = e.primary_initiative ?? 'unclassified';
+    (grouped[key] ??= []).push({ edge: e, direction: 'out' });
+  }
+  for (const e of inbound) {
+    const key = e.primary_initiative ?? 'unclassified';
+    (grouped[key] ??= []).push({ edge: e, direction: 'in' });
+  }
+
+  async function handleDelete(edgeId: string) {
+    if (!onEdgeDelete) return;
+    if (
+      !window.confirm(
+        'Delete this edge? Trainers can re-create by re-running an analysis.',
+      )
+    ) {
+      return;
+    }
+    setBusyEdgeId(edgeId);
+    try {
+      await onEdgeDelete(edgeId);
+    } finally {
+      setBusyEdgeId(null);
+    }
+  }
+
+  async function handleReclassify(edgeId: string, initiative: Initiative) {
+    if (!onEdgeReclassify) return;
+    setBusyEdgeId(edgeId);
+    try {
+      await onEdgeReclassify(edgeId, initiative);
+    } finally {
+      setBusyEdgeId(null);
+    }
+  }
+
+  const totalConnections = outbound.length + inbound.length;
+
+  return (
+    <div className="absolute left-3 top-16 z-30 flex h-[calc(100%-5rem)] w-[340px] flex-col overflow-hidden rounded-md border border-white/15 bg-slate-950/95 text-slate-100 shadow-xl backdrop-blur">
+      {/* Header */}
+      <div className="flex items-start justify-between gap-2 border-b border-white/10 px-3 py-2.5">
+        <div className="min-w-0">
+          <div className="truncate text-sm font-semibold">{node.name}</div>
+          <div className="mt-0.5 text-[11px] text-slate-400">
+            {node.type}
+            {node.subtitle ? ` · ${node.subtitle}` : ''}
+            {totalConnections > 0
+              ? ` · ${totalConnections} connection${
+                  totalConnections === 1 ? '' : 's'
+                }`
+              : ''}
+          </div>
+        </div>
+        <button
+          type="button"
+          onClick={onClose}
+          className="rounded-md p-1 text-slate-400 transition-colors hover:bg-slate-900 hover:text-slate-100"
+        >
+          <X className="h-4 w-4" />
+        </button>
+      </div>
+
+      {/* Edge list, grouped by initiative */}
+      <div className="flex-1 overflow-y-auto px-3 py-2 text-xs">
+        {totalConnections === 0 ? (
+          <p className="py-6 text-center text-slate-500">
+            No edges yet. Run an analysis that mentions this technique and the
+            graph will start filling in.
+          </p>
+        ) : (
+          INITIATIVE_ORDER.map((key) => {
+            const items = grouped[key];
+            if (!items?.length) return null;
+            const swatch =
+              key !== 'unclassified'
+                ? edgePalette[key] ?? edgePalette.default
+                : edgePalette.default;
+            return (
+              <div key={key} className="mb-3">
+                <div className="mb-1.5 flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider text-slate-400">
+                  <span
+                    className="h-2 w-2 rounded-sm"
+                    style={{ background: swatch }}
+                  />
+                  {INITIATIVE_LABELS[key]} · {items.length}
+                </div>
+                <div className="space-y-1">
+                  {items.map(({ edge, direction }) => {
+                    const otherId =
+                      direction === 'out' ? edge.target : edge.source;
+                    const other = nodeMap.get(otherId as string);
+                    const otherName = other?.name ?? otherId;
+                    const arrow = direction === 'out' ? '→' : '←';
+                    const isBusy = busyEdgeId === (edge as { id?: string }).id;
+                    const edgeId = (edge as { id?: string }).id ?? '';
+                    return (
+                      <div
+                        key={edgeId || `${edge.source}-${edge.target}`}
+                        className="flex items-center gap-2 rounded-md border border-white/10 bg-slate-900/60 px-2 py-1.5"
+                      >
+                        <span className="text-slate-500">{arrow}</span>
+                        <div className="min-w-0 flex-1">
+                          <div className="truncate text-sm text-slate-100">
+                            {otherName}
+                          </div>
+                          <div className="text-[10px] text-slate-500">
+                            {edge.type}
+                            {edge.weight != null
+                              ? ` · w ${edge.weight.toFixed(2)}`
+                              : ''}
+                            {edge.frequency != null
+                              ? ` · ×${edge.frequency}`
+                              : ''}
+                          </div>
+                        </div>
+                        {onEdgeReclassify && edgeId ? (
+                          <select
+                            value={edge.primary_initiative ?? ''}
+                            disabled={isBusy}
+                            onChange={(ev) => {
+                              const val = ev.target.value as
+                                | Initiative
+                                | '';
+                              if (val) handleReclassify(edgeId, val);
+                            }}
+                            className="rounded border border-white/15 bg-slate-950 px-1 py-0.5 text-[10px] text-slate-100"
+                            title="Reclassify initiative"
+                          >
+                            <option value="">—</option>
+                            <option value="lead">Lead</option>
+                            <option value="sim_counter">Sim</option>
+                            <option value="delayed_counter">Del</option>
+                            <option value="feint">Feint</option>
+                          </select>
+                        ) : null}
+                        {onEdgeDelete && edgeId ? (
+                          <button
+                            type="button"
+                            onClick={() => handleDelete(edgeId)}
+                            disabled={isBusy}
+                            className="rounded p-1 text-rose-300 transition-colors hover:bg-rose-500/10 hover:text-rose-200 disabled:opacity-40"
+                          >
+                            {isBusy ? (
+                              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                            ) : (
+                              <Trash2 className="h-3.5 w-3.5" />
+                            )}
+                          </button>
+                        ) : null}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            );
+          })
+        )}
+      </div>
+    </div>
+  );
+}

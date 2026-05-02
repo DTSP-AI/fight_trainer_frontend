@@ -83,4 +83,12 @@ export const graphApi = {
     apiClient.delete<{ deleted: boolean; id: string }>(
       `/api/graph/edges/${encodeURIComponent(edgeId)}`,
     ),
+  updateEdge: (
+    edgeId: string,
+    payload: { initiative?: Initiative; kind?: EdgeKind },
+  ) =>
+    apiClient.patch<GraphEdge>(
+      `/api/graph/edges/${encodeURIComponent(edgeId)}`,
+      payload,
+    ),
 };

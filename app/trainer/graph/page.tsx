@@ -131,6 +131,7 @@ function GraphPageInner() {
         studentId={studentId}
         initiative={initiative || undefined}
         height={680}
+        editable
       />
     </div>
   );
