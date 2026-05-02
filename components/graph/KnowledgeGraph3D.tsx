@@ -21,7 +21,6 @@ import {
   useRef,
   useState,
   useCallback,
-  type MouseEvent as ReactMouseEvent,
 } from 'react';
 import dynamic from 'next/dynamic';
 import {
@@ -182,10 +181,6 @@ export function KnowledgeGraph3D({
   const [hidden, setHidden] = useState<Set<string>>(new Set());
   const [hovered, setHovered] = useState<KGNode | null>(null);
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
-  const [tooltipPos, setTooltipPos] = useState<{ x: number; y: number }>({
-    x: 0,
-    y: 0,
-  });
   const [size, setSize] = useState({ width: 800, height });
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [refreshNonce, setRefreshNonce] = useState(0);
@@ -206,12 +201,10 @@ export function KnowledgeGraph3D({
   const highlightLinksRef = useRef<Set<string>>(new Set());
   const lastHoveredIdRef = useRef<string | null>(null);
 
-  // One-shot camera fit per data-change. The d3 force engine settles
-  // multiple times during a single layout (ticks, drag, etc.); without
-  // this guard we'd fitView() on every settle and fight the user's
-  // orbit/drag. Resets when the payload or visibility filter changes,
-  // so a sport-filter switch re-centers on the new subgraph centroid.
-  const hasInitialFitRef = useRef(false);
+  // No auto-fit. d3 force has a built-in centering force, so the graph
+  // settles around the origin naturally. The default camera position is
+  // already framed for that. Auto-fitting on engine settle fights the
+  // user's drag — leave the camera alone (matches MW behavior).
 
   const nodePalette = useMemo(
     () => ({
@@ -533,61 +526,13 @@ export function KnowledgeGraph3D({
     [isLarge],
   );
 
-  // ── Camera helpers ──
-  function fitView(ms = 800) {
-    const g = graphRef.current as
-      | { zoomToFit?: (ms?: number, padding?: number) => void }
-      | null;
-    g?.zoomToFit?.(ms, 60);
-  }
-  function flyToNode(
-    node: KGNode & { x?: number; y?: number; z?: number },
-  ) {
-    const g = graphRef.current as
-      | {
-          cameraPosition?: (
-            pos: { x: number; y: number; z: number },
-            lookAt?: { x: number; y: number; z: number },
-            ms?: number,
-          ) => void;
-        }
-      | null;
-    if (!g?.cameraPosition || node.x == null || node.y == null || node.z == null)
-      return;
-    const dist = 80;
-    const r = Math.hypot(node.x, node.y, node.z) || 1;
-    g.cameraPosition(
-      {
-        x: node.x * (1 + dist / r),
-        y: node.y * (1 + dist / r),
-        z: node.z * (1 + dist / r),
-      },
-      { x: node.x, y: node.y, z: node.z },
-      900,
-    );
-  }
-
-  // Auto-fit ONCE per data-load. After the first settle the camera is
-  // hands-off — the user owns it. Sport-filter switches reset the flag
-  // (see effect below) so the next engine settle re-centers the new
-  // subgraph centroid, then yields back to the user.
-  const handleEngineStop = useCallback(() => {
-    if (hasInitialFitRef.current) return;
-    fitView(800);
-    hasInitialFitRef.current = true;
-  }, []);
-
-  // Reset the one-shot fit guard whenever the visible graph composition
-  // changes — new payload (refresh, sport filter switch, fresh fetch)
-  // or a legend type-toggle.
-  useEffect(() => {
-    hasInitialFitRef.current = false;
-  }, [payload, hidden]);
-
+  // No camera helpers. Click selects (opens side panel when enabled);
+  // it does NOT fly the camera. d3 force keeps the graph centered at
+  // the origin and the default camera is framed for that — same model
+  // as MW's KnowledgeGraph.tsx, which never zoomToFits or flies.
   const handleNodeClick = useCallback(
     (n: object) => {
-      const node = n as KGNode & { x?: number; y?: number; z?: number };
-      flyToNode(node);
+      const node = n as KGNode;
       if (sidePanelEnabled) {
         setSelectedNodeId(node.id);
       }
@@ -595,12 +540,6 @@ export function KnowledgeGraph3D({
     },
     [onNodeClick, sidePanelEnabled],
   );
-
-  function handleMouseMove(e: ReactMouseEvent<HTMLDivElement>) {
-    const rect = containerRef.current?.getBoundingClientRect();
-    if (!rect) return;
-    setTooltipPos({ x: e.clientX - rect.left, y: e.clientY - rect.top });
-  }
 
   function toggleType(t: string) {
     setHidden((prev) => {
@@ -742,63 +681,67 @@ export function KnowledgeGraph3D({
           'relative overflow-hidden',
           isFullscreen ? 'flex-1' : 'h-full w-full',
         )}
-        onMouseMove={handleMouseMove}
         style={!isFullscreen ? { background: backgroundColor } : undefined}
       >
-        {/* Legend */}
+        {/* Legend — top-right, MW pattern. Click a row to toggle visibility. */}
         {showLegend && Object.keys(typeCounts).length > 0 && (
-          <div className="absolute bottom-3 right-3 z-10 max-h-[60%] overflow-y-auto rounded-md border border-white/10 bg-slate-950/85 px-3 py-2 text-[11px] text-slate-100 backdrop-blur">
-            <div className="mb-1.5 text-[10px] font-semibold uppercase tracking-wider text-slate-400">
-              Nodes · click to toggle
+          <div className="absolute right-3 top-16 z-10 max-h-[70%] overflow-y-auto rounded-lg border border-white/10 bg-slate-950/90 p-2.5 backdrop-blur-sm">
+            <div className="mb-1.5 text-xs font-medium text-slate-200">
+              Node Types
             </div>
-            {Object.keys(typeCounts)
-              .sort()
-              .map((t) => {
-                const color = nodePalette[t] ?? fallbackColor(t);
-                return (
-                  <button
-                    key={t}
-                    type="button"
-                    onClick={() => toggleType(t)}
-                    className={cn(
-                      'flex w-full items-center gap-2 py-0.5 text-left',
-                      hidden.has(t) ? 'opacity-40' : 'opacity-100',
-                    )}
-                  >
-                    <span
-                      className="h-2.5 w-2.5 rounded-full"
-                      style={{ background: color }}
-                    />
-                    <span>{t}</span>
-                    <span className="ml-auto text-slate-500">
-                      {typeCounts[t]}
-                    </span>
-                  </button>
-                );
-              })}
-
-            <div className="mt-3 mb-1 text-[10px] font-semibold uppercase tracking-wider text-slate-400">
-              Edges · initiative
+            <div className="space-y-1">
+              {Object.keys(typeCounts)
+                .sort()
+                .map((t) => {
+                  const color = nodePalette[t] ?? fallbackColor(t);
+                  return (
+                    <button
+                      key={t}
+                      type="button"
+                      onClick={() => toggleType(t)}
+                      className={cn(
+                        'flex w-full items-center gap-2 text-left transition-opacity',
+                        hidden.has(t) ? 'opacity-40' : 'opacity-100',
+                      )}
+                    >
+                      <span
+                        className="h-2.5 w-2.5 rounded-full"
+                        style={{ background: color }}
+                      />
+                      <span className="text-xs text-slate-100">{t}</span>
+                      <span className="ml-auto text-[10px] text-slate-500">
+                        {typeCounts[t]}
+                      </span>
+                    </button>
+                  );
+                })}
             </div>
-            {(['lead', 'sim_counter', 'delayed_counter', 'feint'] as const).map(
-              (k) => {
-                const labels: Record<string, string> = {
-                  lead: 'Lead',
-                  sim_counter: 'Sim Counter',
-                  delayed_counter: 'Delayed Counter',
-                  feint: 'Feint',
-                };
-                return (
-                  <div key={k} className="flex items-center gap-2 py-0.5">
-                    <span
-                      className="h-2.5 w-2.5 rounded-sm"
-                      style={{ background: edgeInitiativePalette[k] }}
-                    />
-                    <span>{labels[k]}</span>
-                  </div>
-                );
-              },
-            )}
+            <div className="mt-2.5 mb-1 text-xs font-medium text-slate-200">
+              Edge Initiative
+            </div>
+            <div className="space-y-1">
+              {(['lead', 'sim_counter', 'delayed_counter', 'feint'] as const).map(
+                (k) => {
+                  const labels: Record<string, string> = {
+                    lead: 'Lead',
+                    sim_counter: 'Sim Counter',
+                    delayed_counter: 'Delayed Counter',
+                    feint: 'Feint',
+                  };
+                  return (
+                    <div key={k} className="flex items-center gap-2">
+                      <span
+                        className="h-2.5 w-2.5 rounded-sm"
+                        style={{ background: edgeInitiativePalette[k] }}
+                      />
+                      <span className="text-xs text-slate-100">
+                        {labels[k]}
+                      </span>
+                    </div>
+                  );
+                },
+              )}
+            </div>
           </div>
         )}
 
@@ -815,23 +758,17 @@ export function KnowledgeGraph3D({
           />
         ) : null}
 
-        {/* Cursor-following hover tooltip */}
+        {/* Hover detail card — fixed bottom-left (MW pattern). */}
         {hovered && (
-          <div
-            className="pointer-events-none absolute z-20 max-w-xs rounded-md border border-white/15 bg-slate-950/95 px-3 py-2 text-xs text-slate-100 shadow-lg backdrop-blur"
-            style={{
-              left: Math.min(tooltipPos.x + 14, size.width - 280),
-              top: Math.max(tooltipPos.y - 16, 8),
-            }}
-          >
-            <div className="font-semibold">{hovered.name}</div>
-            <div className="mt-0.5 text-[11px] text-slate-400">
-              {hovered.type}
-              {hovered.canonical ? ' · canonical' : ''}
+          <div className="absolute bottom-3 left-3 z-20 rounded-lg border border-white/10 bg-slate-950/90 p-2.5 backdrop-blur-sm">
+            <div className="text-sm font-medium text-slate-50">
+              {hovered.name}
             </div>
-            {hovered.subtitle ? (
-              <div className="mt-1 text-[11px]">{hovered.subtitle}</div>
-            ) : null}
+            <div className="text-xs text-slate-400">
+              Type: {hovered.type}
+              {hovered.canonical ? ' · canonical' : ''}
+              {hovered.subtitle ? ` · ${hovered.subtitle}` : ''}
+            </div>
           </div>
         )}
 
@@ -842,33 +779,31 @@ export function KnowledgeGraph3D({
           height={isFullscreen ? size.height : height}
           backgroundColor={backgroundColor}
           // Smooth controls — orbit, drag enabled, longer cooldown
-          controlType="orbit"
-          enableNodeDrag
+          // MW interaction model — trackball default, drag OFF.
+          // Drag-on caused "I tried to orbit but the node yanked" feel.
+          enableNodeDrag={false}
           enableNavigationControls
           showNavInfo={false}
           // Custom three.js node objects (cached spheres + sprite labels)
           nodeThreeObject={nodeThreeObject as (node: object) => object}
           nodeThreeObjectExtend={false}
           nodeColor={resolveNodeColor}
-          nodeOpacity={0.95}
-          nodeResolution={isLarge ? 4 : 8}
-          nodeLabel={() => ''}
-          // Edges
+          nodeOpacity={0.9}
+          nodeResolution={isLarge ? 4 : 6}
+          nodeLabel={(node: object) => {
+            const n = node as KGNode;
+            return `${n.name} (${n.type})${n.subtitle ? `\n${n.subtitle}` : ''}`;
+          }}
+          // Edges — no directional particles (extra motion fights stability)
           linkColor={resolveLinkColor}
-          linkOpacity={isLarge ? 0.45 : 0.6}
+          linkOpacity={isLarge ? 0.22 : 0.35}
           linkWidth={resolveLinkWidth}
           linkResolution={isLarge ? 2 : 4}
-          linkDirectionalParticles={(l: object) =>
-            ((l as KGEdge).weight ?? 0) > 0.6 ? 2 : 0
-          }
-          linkDirectionalParticleSpeed={0.004}
-          linkDirectionalParticleWidth={1.6}
-          // Layout — settles smoothly without freezing
-          warmupTicks={20}
-          cooldownTicks={isLarge ? 60 : 120}
-          d3AlphaDecay={0.025}
-          d3VelocityDecay={0.28}
-          onEngineStop={handleEngineStop}
+          // Layout — MW profile: settles fast, then quiets down
+          warmupTicks={isLarge ? 8 : 18}
+          cooldownTicks={isLarge ? 12 : 28}
+          d3AlphaDecay={isLarge ? 0.2 : 0.14}
+          d3VelocityDecay={0.4}
           onNodeHover={handleNodeHover}
           onNodeClick={handleNodeClick}
         />
