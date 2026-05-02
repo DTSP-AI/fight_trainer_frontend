@@ -206,6 +206,13 @@ export function KnowledgeGraph3D({
   const highlightLinksRef = useRef<Set<string>>(new Set());
   const lastHoveredIdRef = useRef<string | null>(null);
 
+  // One-shot camera fit per data-change. The d3 force engine settles
+  // multiple times during a single layout (ticks, drag, etc.); without
+  // this guard we'd fitView() on every settle and fight the user's
+  // orbit/drag. Resets when the payload or visibility filter changes,
+  // so a sport-filter switch re-centers on the new subgraph centroid.
+  const hasInitialFitRef = useRef(false);
+
   const nodePalette = useMemo(
     () => ({
       ...DEFAULT_NODE_PALETTE,
@@ -560,9 +567,22 @@ export function KnowledgeGraph3D({
     );
   }
 
+  // Auto-fit ONCE per data-load. After the first settle the camera is
+  // hands-off — the user owns it. Sport-filter switches reset the flag
+  // (see effect below) so the next engine settle re-centers the new
+  // subgraph centroid, then yields back to the user.
   const handleEngineStop = useCallback(() => {
-    fitView(600);
+    if (hasInitialFitRef.current) return;
+    fitView(800);
+    hasInitialFitRef.current = true;
   }, []);
+
+  // Reset the one-shot fit guard whenever the visible graph composition
+  // changes — new payload (refresh, sport filter switch, fresh fetch)
+  // or a legend type-toggle.
+  useEffect(() => {
+    hasInitialFitRef.current = false;
+  }, [payload, hidden]);
 
   const handleNodeClick = useCallback(
     (n: object) => {
