@@ -25,12 +25,11 @@ import {
 } from 'react';
 import dynamic from 'next/dynamic';
 import {
+  Gauge,
   Loader2,
   Maximize2,
   Minimize2,
   RefreshCw,
-  RotateCcw,
-  Focus,
   Trash2,
   X,
 } from 'lucide-react';
@@ -656,7 +655,7 @@ export function KnowledgeGraph3D({
       className={wrapperClass}
       style={isFullscreen ? undefined : { height, background: backgroundColor }}
     >
-      {/* ── Top toolbar ── */}
+      {/* ── Top toolbar — MW parity ── */}
       <div
         className={cn(
           'flex items-center justify-between gap-3',
@@ -668,21 +667,22 @@ export function KnowledgeGraph3D({
         {showHeader && (
           <div
             className={cn(
-              'flex items-center gap-2 text-xs text-slate-200',
+              'flex items-center gap-3 text-xs text-slate-200',
               isFullscreen
                 ? ''
                 : 'rounded-md border border-white/10 bg-slate-950/80 px-3 py-2 backdrop-blur',
             )}
           >
-            <span className="font-semibold">
-              {(payload.metadata?.project as string) ?? 'Knowledge Graph'}
+            <span>
+              {graphData.nodes.length} nodes · {graphData.links.length} edges
             </span>
-            <span className="text-slate-400">
-              · {graphData.nodes.length} nodes · {graphData.links.length} edges
+            <span className="inline-flex items-center gap-1 rounded-full border border-white/10 bg-slate-900/70 px-2 py-0.5">
+              <Gauge className="h-3 w-3" />
+              3D optimized
             </span>
             {isLarge ? (
-              <span className="rounded-full border border-amber-700/60 bg-amber-950/40 px-2 py-0.5 text-[10px] text-amber-300">
-                large mode
+              <span className="rounded-full border border-amber-700/60 bg-amber-950/40 px-2 py-0.5 text-amber-300">
+                Large graph mode
               </span>
             ) : null}
             {isFullscreen ? (
@@ -690,42 +690,27 @@ export function KnowledgeGraph3D({
             ) : null}
           </div>
         )}
-        <div className="flex items-center gap-1.5">
+        <div className="flex items-center gap-1">
           <button
             type="button"
             onClick={refresh}
-            title="Refresh graph data"
-            className="rounded-md border border-white/10 bg-slate-950/80 p-1.5 text-slate-100 backdrop-blur transition-colors hover:bg-slate-900"
+            className="flex items-center gap-1.5 rounded-lg border border-white/10 bg-slate-950/80 px-3 py-1.5 text-sm text-slate-200 backdrop-blur transition-colors hover:bg-slate-900 hover:text-slate-50"
           >
-            <RefreshCw className="h-4 w-4" />
-          </button>
-          <button
-            type="button"
-            onClick={() => fitView(800)}
-            title="Fit to view"
-            className="rounded-md border border-white/10 bg-slate-950/80 p-1.5 text-slate-100 backdrop-blur transition-colors hover:bg-slate-900"
-          >
-            <Focus className="h-4 w-4" />
-          </button>
-          <button
-            type="button"
-            onClick={() => fitView(0)}
-            title="Reset camera"
-            className="rounded-md border border-white/10 bg-slate-950/80 p-1.5 text-slate-100 backdrop-blur transition-colors hover:bg-slate-900"
-          >
-            <RotateCcw className="h-4 w-4" />
+            <RefreshCw className="h-3.5 w-3.5" />
+            Refresh
           </button>
           <button
             type="button"
             onClick={() => setIsFullscreen((v) => !v)}
             title={isFullscreen ? 'Exit fullscreen' : 'Fullscreen'}
-            className="rounded-md border border-white/10 bg-slate-950/80 p-1.5 text-slate-100 backdrop-blur transition-colors hover:bg-slate-900"
+            className="flex items-center gap-1.5 rounded-lg border border-white/10 bg-slate-950/80 px-3 py-1.5 text-sm text-slate-200 backdrop-blur transition-colors hover:bg-slate-900 hover:text-slate-50"
           >
             {isFullscreen ? (
-              <Minimize2 className="h-4 w-4" />
+              <Minimize2 className="h-3.5 w-3.5" />
             ) : (
-              <Maximize2 className="h-4 w-4" />
+              <Maximize2 className="h-3.5 w-3.5" />
             )}
+            {isFullscreen ? 'Exit' : 'Expand'}
           </button>
         </div>
       </div>
