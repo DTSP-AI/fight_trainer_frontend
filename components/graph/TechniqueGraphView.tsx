@@ -77,9 +77,13 @@ export function TechniqueGraphView({
     (async () => {
       try {
         const [n, e] = await Promise.all([
+          // techniques() backend now includes canonical principles
+          // regardless of sport filter (migration 016 strategy canon).
           graphApi.techniques({ sport, limit: 1500 }),
+          // Don't sport-filter edges — KnowledgeGraph3D filters edges
+          // client-side to those whose endpoints are in the visible
+          // node set, which already gives the right answer per art.
           graphApi.edges({
-            sport,
             initiative,
             min_weight: 0.0,
             limit: 5000,
@@ -151,6 +155,26 @@ export function TechniqueGraphView({
       const isCanonical = (n.discipline_class || '').startsWith('principle.');
       const tenants = n.stats?.distinct_tenant_count ?? 0;
       const mentions = n.stats?.analysis_mention_count ?? 0;
+      const sportLabel = (n.sport || '').toUpperCase();
+      const subtitleParts: string[] = [];
+      if (isCanonical) {
+        subtitleParts.push(
+          n.discipline_class === 'principle.musashi'
+            ? 'Musashi · Book of Five Rings'
+            : 'Sun Tzu · Art of War',
+        );
+        subtitleParts.push('Universal across arts');
+      } else {
+        if (sportLabel) subtitleParts.push(sportLabel);
+        if (n.discipline_class) subtitleParts.push(n.discipline_class);
+        if (mentions > 0) {
+          subtitleParts.push(
+            `${mentions} mention${mentions === 1 ? '' : 's'} · ${tenants} gym${
+              tenants === 1 ? '' : 's'
+            }`,
+          );
+        }
+      }
       return {
         id: n.id,
         name: n.name,
@@ -158,15 +182,7 @@ export function TechniqueGraphView({
         // Canonical strategy principles render larger (1.4x) and gold/
         // crimson — they're the trunk that empirical leaves hook into.
         canonical: isCanonical,
-        subtitle: isCanonical
-          ? n.discipline_class === 'principle.musashi'
-            ? 'Musashi · Book of Five Rings'
-            : 'Sun Tzu · Art of War'
-          : mentions > 0
-            ? `${mentions} mention${mentions === 1 ? '' : 's'} · ${tenants} gym${
-                tenants === 1 ? '' : 's'
-              }`
-            : n.discipline_class ?? '',
+        subtitle: subtitleParts.join(' · '),
         props: {
           sport: n.sport,
           discipline_class: n.discipline_class,
