@@ -27,9 +27,22 @@ const DISCIPLINE_PALETTE: Record<string, string> = {
   movement: '#60a5fa',
   uncategorized: '#94a3b8',
   // Strategy canon — Musashi (gold) and Sun Tzu (crimson). Migration
-  // 016 seeded ~30 canonical principles with these category prefixes.
+  // 016/017/018 seeded ~30 canonical principles with these category prefixes.
   'principle.musashi': '#f59e0b',
   'principle.sun_tzu': '#dc2626',
+  // BJJ canon (migration 019) — distinct hues per role in the chain.
+  'bjj.position': '#22c55e',     // emerald — positional anchors (mount, side, back, guard)
+  'bjj.guard': '#10b981',        // teal-green — specific guards (DLR, X, butterfly)
+  'bjj.pass': '#06b6d4',         // cyan — passes
+  'bjj.sweep': '#3b82f6',        // blue — sweeps
+  'bjj.submission': '#a78bfa',   // violet — submissions (matches striking/grappling 'submission')
+  'bjj.transition': '#f472b6',   // pink — transitions (back take, S-mount)
+  'bjj.escape': '#fb923c',       // orange — defensive escapes
+  // MMA / wrestling canon (migration 020) — Pete's lead-foot-dom chain palette.
+  'mma.setup': '#facc15',        // yellow — setup layer (striking pressure, level change)
+  'mma.clinch': '#c084fc',       // lavender — clinch positions (body lock, plum)
+  'mma.takedown': '#0ea5e9',     // sky blue — takedowns
+  'mma.defense': '#f97316',      // orange — wrestling defense (sprawl, whizzer)
   default: '#94a3b8',
 };
 
@@ -152,21 +165,45 @@ export function TechniqueGraphView({
       else if (studentId && recommended.has(n.id)) type = 'recommended';
       else type = (n.discipline_class || 'default').toLowerCase();
 
-      const isCanonical = (n.discipline_class || '').startsWith('principle.');
+      const dc = n.discipline_class || '';
+      const isPrinciple = dc.startsWith('principle.');
+      const isBjjCanon = dc.startsWith('bjj.');
+      const isMmaCanon = dc.startsWith('mma.');
+      const isCanonical = isPrinciple;
       const tenants = n.stats?.distinct_tenant_count ?? 0;
       const mentions = n.stats?.analysis_mention_count ?? 0;
       const sportLabel = (n.sport || '').toUpperCase();
+      const categoryLeaf = dc.includes('.')
+        ? dc.split('.').pop() ?? ''
+        : dc;
+      const categoryLabel = categoryLeaf
+        ? categoryLeaf.charAt(0).toUpperCase() + categoryLeaf.slice(1)
+        : '';
       const subtitleParts: string[] = [];
-      if (isCanonical) {
+      if (isPrinciple) {
         subtitleParts.push(
-          n.discipline_class === 'principle.musashi'
+          dc === 'principle.musashi'
             ? 'Musashi · Book of Five Rings'
             : 'Sun Tzu · Art of War',
         );
         subtitleParts.push('Universal across arts');
+      } else if (isBjjCanon) {
+        subtitleParts.push(`BJJ · ${categoryLabel}`);
+        if (mentions > 0) {
+          subtitleParts.push(
+            `${mentions} mention${mentions === 1 ? '' : 's'}`,
+          );
+        }
+      } else if (isMmaCanon) {
+        subtitleParts.push(`MMA · ${categoryLabel}`);
+        if (mentions > 0) {
+          subtitleParts.push(
+            `${mentions} mention${mentions === 1 ? '' : 's'}`,
+          );
+        }
       } else {
         if (sportLabel) subtitleParts.push(sportLabel);
-        if (n.discipline_class) subtitleParts.push(n.discipline_class);
+        if (dc) subtitleParts.push(dc);
         if (mentions > 0) {
           subtitleParts.push(
             `${mentions} mention${mentions === 1 ? '' : 's'} · ${tenants} gym${

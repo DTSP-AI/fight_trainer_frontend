@@ -134,7 +134,6 @@ const DEFAULT_EDGE_PALETTE: Record<string, string> = {
 const DIM_NODE_COLOR = '#1f2937';
 const DIM_EDGE_COLOR = '#0f172a';
 const NEUTRAL_EDGE_COLOR = '#334155';
-const HIGHLIGHT_EDGE_COLOR = '#cbd5e1';
 
 const LARGE_NODE_THRESHOLD = 140;
 const LARGE_EDGE_THRESHOLD = 260;
@@ -197,8 +196,13 @@ export function KnowledgeGraph3D({
   const materialCacheRef = useRef<Map<string, object>>(new Map());
 
   // Hover highlight state (refs so repaints don't restart layout).
+  // Forward = edges leaving the hovered node (offense ladder).
+  // Reverse = edges arriving at the hovered node (defense / setup).
+  // The palindrome reads: hover any technique, see what offense it
+  // enables (green) and what enabled / counters it (rose).
   const highlightNodesRef = useRef<Set<string>>(new Set());
-  const highlightLinksRef = useRef<Set<string>>(new Set());
+  const highlightForwardLinksRef = useRef<Set<string>>(new Set());
+  const highlightReverseLinksRef = useRef<Set<string>>(new Set());
   const lastHoveredIdRef = useRef<string | null>(null);
 
   // No auto-fit. d3 force has a built-in centering force, so the graph
@@ -458,7 +462,26 @@ export function KnowledgeGraph3D({
     [colorFor, ensureModules, getGeometry, getMaterial, isLarge, labeledNodeIds],
   );
 
-  // ── Hover handler: dim non-connected, brighten neighborhood ──
+  // ── Hover handler: split forward + reverse for palindrome viz ──
+  // Build per-node forward/reverse edge maps once per graph data
+  // change. Hover then just looks them up.
+  const directionalAdjacency = useMemo(() => {
+    const forward = new Map<string, Set<string>>();
+    const reverse = new Map<string, Set<string>>();
+    for (const n of graphData.nodes) {
+      forward.set(n.id, new Set());
+      reverse.set(n.id, new Set());
+    }
+    for (const l of graphData.links) {
+      const s = getNodeId(l.source as string);
+      const t = getNodeId(l.target as string);
+      const key = `${s}::${t}`;
+      forward.get(s)?.add(key);
+      reverse.get(t)?.add(key);
+    }
+    return { forward, reverse };
+  }, [graphData.nodes, graphData.links]);
+
   const handleNodeHover = useCallback(
     (n: object | null) => {
       const node = n as KGNode | null;
@@ -468,17 +491,23 @@ export function KnowledgeGraph3D({
       setHovered(node);
       if (!node) {
         highlightNodesRef.current = new Set();
-        highlightLinksRef.current = new Set();
+        highlightForwardLinksRef.current = new Set();
+        highlightReverseLinksRef.current = new Set();
       } else {
         highlightNodesRef.current = new Set(
           adjacency.nodes.get(node.id) ?? [node.id],
         );
-        highlightLinksRef.current = new Set(adjacency.links.get(node.id) ?? []);
+        highlightForwardLinksRef.current = new Set(
+          directionalAdjacency.forward.get(node.id) ?? [],
+        );
+        highlightReverseLinksRef.current = new Set(
+          directionalAdjacency.reverse.get(node.id) ?? [],
+        );
       }
       const g = graphRef.current as { refresh?: () => void } | null;
       g?.refresh?.();
     },
-    [adjacency.links, adjacency.nodes],
+    [adjacency.nodes, directionalAdjacency.forward, directionalAdjacency.reverse],
   );
 
   // ── Color resolvers passed to ForceGraph3D ──
@@ -492,21 +521,28 @@ export function KnowledgeGraph3D({
     [colorFor],
   );
 
+  // Palindrome viz: forward edges (the offense ladder leaving this
+  // node) glow emerald; reverse edges (the defense ladder arriving)
+  // glow rose. Other edges dim. Without a hover, fall back to the
+  // initiative palette so the graph still shows initiative coloring.
+  const FORWARD_EDGE_COLOR = '#10b981';   // emerald — offense
+  const REVERSE_EDGE_COLOR = '#f43f5e';   // rose — counter / arriving
+
   const resolveLinkColor = useCallback(
     (l: object) => {
       const link = l as KGEdge;
       const key = `${getNodeId(link.source as string)}::${getNodeId(link.target as string)}`;
-      const highlights = highlightLinksRef.current;
+      const fwd = highlightForwardLinksRef.current;
+      const rev = highlightReverseLinksRef.current;
       const initiativeColor =
         (link.primary_initiative &&
           edgeInitiativePalette[link.primary_initiative]) ||
         null;
-      if (highlights.size === 0) {
+      if (fwd.size === 0 && rev.size === 0) {
         return initiativeColor ?? NEUTRAL_EDGE_COLOR;
       }
-      if (highlights.has(key)) {
-        return initiativeColor ?? HIGHLIGHT_EDGE_COLOR;
-      }
+      if (fwd.has(key)) return FORWARD_EDGE_COLOR;
+      if (rev.has(key)) return REVERSE_EDGE_COLOR;
       return DIM_EDGE_COLOR;
     },
     [edgeInitiativePalette],
@@ -516,12 +552,14 @@ export function KnowledgeGraph3D({
     (l: object) => {
       const link = l as KGEdge;
       const key = `${getNodeId(link.source as string)}::${getNodeId(link.target as string)}`;
-      const highlights = highlightLinksRef.current;
+      const fwd = highlightForwardLinksRef.current;
+      const rev = highlightReverseLinksRef.current;
       const w = link.weight ?? 1;
-      if (highlights.size === 0) {
+      if (fwd.size === 0 && rev.size === 0) {
         return Math.max(0.6, w * (isLarge ? 1.0 : 1.6));
       }
-      return highlights.has(key) ? Math.max(1.4, w * 2.4) : 0.2;
+      if (fwd.has(key) || rev.has(key)) return Math.max(1.6, w * 2.6);
+      return 0.2;
     },
     [isLarge],
   );
