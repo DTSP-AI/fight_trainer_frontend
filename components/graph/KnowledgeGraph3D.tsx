@@ -754,7 +754,20 @@ export function KnowledgeGraph3D({
                   );
                 })}
             </div>
-            <div className="mt-2.5 mb-1 text-xs font-medium text-slate-200">
+            <div className="mt-3 mb-1 text-xs font-medium text-slate-200">
+              On hover
+            </div>
+            <div className="space-y-1">
+              <div className="flex items-center gap-2">
+                <span className="h-2.5 w-2.5 rounded-sm" style={{ background: '#10b981' }} />
+                <span className="text-xs text-slate-100">Forward · offense</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="h-2.5 w-2.5 rounded-sm" style={{ background: '#f43f5e' }} />
+                <span className="text-xs text-slate-100">Reverse · counter</span>
+              </div>
+            </div>
+            <div className="mt-3 mb-1 text-xs font-medium text-slate-200">
               Edge Initiative
             </div>
             <div className="space-y-1">
@@ -841,13 +854,23 @@ export function KnowledgeGraph3D({
           linkOpacity={isLarge ? 0.45 : 0.6}
           linkWidth={resolveLinkWidth}
           linkResolution={isLarge ? 2 : 4}
-          // Heavier edges spawn flowing particles — adds the gentle
-          // motion that signals "this graph is alive" without snapping.
-          linkDirectionalParticles={(l: object) =>
-            ((l as KGEdge).weight ?? 0) > 0.6 ? 2 : 0
-          }
-          linkDirectionalParticleSpeed={0.004}
-          linkDirectionalParticleWidth={1.6}
+          // Particles do double-duty: ambient motion on heavy edges
+          // ("this graph is alive") AND clear directional flow on the
+          // hovered chain (3 particles per edge, color-following so
+          // forward = emerald flowing, reverse = rose flowing back).
+          linkDirectionalParticles={(l: object) => {
+            const link = l as KGEdge;
+            const key = `${getNodeId(link.source as string)}::${getNodeId(link.target as string)}`;
+            if (
+              highlightForwardLinksRef.current.has(key) ||
+              highlightReverseLinksRef.current.has(key)
+            ) {
+              return 3;
+            }
+            return ((link.weight ?? 0) > 0.6) ? 2 : 0;
+          }}
+          linkDirectionalParticleSpeed={0.005}
+          linkDirectionalParticleWidth={2}
           // Layout — flowy d3 profile (matches the canonical skill at
           // ~/.claude/skills/agentic-kg-pipeline/assets/KnowledgeGraph3D.tsx).
           // Slow alpha decay + low velocity decay + long cooldown = the
@@ -868,24 +891,75 @@ export function KnowledgeGraph3D({
 export default KnowledgeGraph3D;
 
 // ── NodeSidePanel ──────────────────────────────────────────────────
-// Slide-in panel showing the selected node's metadata and outbound edges
-// grouped by initiative. Per-edge: reclassify dropdown + delete button.
-// Mirrors the pattern of MW's KnowledgeRelationships.tsx.
+// Slide-in panel showing the selected node's metadata and edges, grouped
+// by directional kind so the palindrome reads in plain English:
+//
+//   "Sets up"      — outbound sets_up   (offense leaving this node)
+//   "Set up by"    — inbound sets_up    (what feeds into this node)
+//   "Countered by" — outbound counters  (defenses you can deploy)
+//   "Counters"     — inbound counters   (offense you'd defend with this)
+//   "Chains to"    — outbound chains_to / follows_from (general flow)
+//
+// Each section title comes with a one-line plain-English explanation
+// so a non-graph-nerd can read what the connections mean.
 
-const INITIATIVE_LABELS: Record<Initiative | 'unclassified', string> = {
-  lead: 'Lead',
-  sim_counter: 'Simultaneous Counter',
-  delayed_counter: 'Delayed Counter',
-  feint: 'Feint',
-  unclassified: 'Unclassified',
+type RelationKind =
+  | 'sets_up_out'
+  | 'sets_up_in'
+  | 'counters_out'
+  | 'counters_in'
+  | 'chains_out'
+  | 'chains_in';
+
+const RELATION_META: Record<
+  RelationKind,
+  { title: string; hint: string; color: string; arrow: string }
+> = {
+  sets_up_out: {
+    title: 'Sets up',
+    hint: 'Throw this and the techniques below are the natural next step.',
+    color: '#10b981', // emerald
+    arrow: '→',
+  },
+  sets_up_in: {
+    title: 'Set up by',
+    hint: 'These techniques put you in position to throw this.',
+    color: '#10b981',
+    arrow: '←',
+  },
+  counters_out: {
+    title: 'Countered by',
+    hint: 'When this gets thrown at you, these are how you defend.',
+    color: '#f43f5e', // rose
+    arrow: '→',
+  },
+  counters_in: {
+    title: 'Counters',
+    hint: 'You throw this to break the techniques below.',
+    color: '#f43f5e',
+    arrow: '←',
+  },
+  chains_out: {
+    title: 'Chains to',
+    hint: 'Continues the flow toward these positions or principles.',
+    color: '#94a3b8',
+    arrow: '→',
+  },
+  chains_in: {
+    title: 'Flows from',
+    hint: 'These positions or principles lead into this technique.',
+    color: '#94a3b8',
+    arrow: '←',
+  },
 };
 
-const INITIATIVE_ORDER: Array<Initiative | 'unclassified'> = [
-  'lead',
-  'sim_counter',
-  'delayed_counter',
-  'feint',
-  'unclassified',
+const RELATION_ORDER: RelationKind[] = [
+  'sets_up_out',
+  'counters_out',
+  'sets_up_in',
+  'counters_in',
+  'chains_out',
+  'chains_in',
 ];
 
 function NodeSidePanel({
@@ -917,17 +991,29 @@ function NodeSidePanel({
 
   if (!node) return null;
 
-  // Outbound + inbound (treat both as "connections" — direction shown in row)
+  // Group edges by relation-kind + direction so the palindrome is
+  // visible at a glance: "Sets up" + "Set up by" share the same color
+  // (offense), "Counters" + "Countered by" share rose (defense), and
+  // "Chains to" / "Flows from" cover universal-canon links.
   const outbound = edges.filter((e) => e.source === node.id);
   const inbound = edges.filter((e) => e.target === node.id);
-  const grouped: Record<string, Array<{ edge: KGEdge; direction: 'out' | 'in' }>> = {};
+  const grouped: Record<RelationKind, Array<{ edge: KGEdge; direction: 'out' | 'in' }>> = {
+    sets_up_out: [],
+    sets_up_in: [],
+    counters_out: [],
+    counters_in: [],
+    chains_out: [],
+    chains_in: [],
+  };
   for (const e of outbound) {
-    const key = e.primary_initiative ?? 'unclassified';
-    (grouped[key] ??= []).push({ edge: e, direction: 'out' });
+    if (e.type === 'sets_up') grouped.sets_up_out.push({ edge: e, direction: 'out' });
+    else if (e.type === 'counters') grouped.counters_out.push({ edge: e, direction: 'out' });
+    else grouped.chains_out.push({ edge: e, direction: 'out' });
   }
   for (const e of inbound) {
-    const key = e.primary_initiative ?? 'unclassified';
-    (grouped[key] ??= []).push({ edge: e, direction: 'in' });
+    if (e.type === 'sets_up') grouped.sets_up_in.push({ edge: e, direction: 'in' });
+    else if (e.type === 'counters') grouped.counters_in.push({ edge: e, direction: 'in' });
+    else grouped.chains_in.push({ edge: e, direction: 'in' });
   }
 
   async function handleDelete(edgeId: string) {
@@ -984,50 +1070,58 @@ function NodeSidePanel({
         </button>
       </div>
 
-      {/* Edge list, grouped by initiative */}
+      {/* Edge list, grouped by directional relation-kind */}
       <div className="flex-1 overflow-y-auto px-3 py-2 text-xs">
         {totalConnections === 0 ? (
           <p className="py-6 text-center text-slate-500">
-            No edges yet. Run an analysis that mentions this technique and the
-            graph will start filling in.
+            No connections yet. As fight breakdowns mention this technique
+            (or its aliases), the graph fills in.
           </p>
         ) : (
-          INITIATIVE_ORDER.map((key) => {
+          RELATION_ORDER.map((key) => {
             const items = grouped[key];
             if (!items?.length) return null;
-            const swatch =
-              key !== 'unclassified'
-                ? edgePalette[key] ?? edgePalette.default
-                : edgePalette.default;
+            const meta = RELATION_META[key];
             return (
-              <div key={key} className="mb-3">
-                <div className="mb-1.5 flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider text-slate-400">
+              <div key={key} className="mb-4">
+                <div className="mb-1 flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider text-slate-200">
                   <span
                     className="h-2 w-2 rounded-sm"
-                    style={{ background: swatch }}
+                    style={{ background: meta.color }}
                   />
-                  {INITIATIVE_LABELS[key]} · {items.length}
+                  {meta.title} · {items.length}
                 </div>
+                <p className="mb-1.5 text-[11px] leading-snug text-slate-400">
+                  {meta.hint}
+                </p>
                 <div className="space-y-1">
                   {items.map(({ edge, direction }) => {
                     const otherId =
                       direction === 'out' ? edge.target : edge.source;
                     const other = nodeMap.get(otherId as string);
                     const otherName = other?.name ?? otherId;
-                    const arrow = direction === 'out' ? '→' : '←';
                     const isBusy = busyEdgeId === (edge as { id?: string }).id;
                     const edgeId = (edge as { id?: string }).id ?? '';
+                    const initiativeColor =
+                      edge.primary_initiative
+                        ? edgePalette[edge.primary_initiative] ?? edgePalette.default
+                        : null;
                     return (
                       <div
-                        key={edgeId || `${edge.source}-${edge.target}`}
+                        key={edgeId || `${edge.source}-${edge.target}-${edge.type}`}
                         className="flex items-center gap-2 rounded-md border border-white/10 bg-slate-900/60 px-2 py-1.5"
                       >
-                        <span className="text-slate-500">{arrow}</span>
+                        <span
+                          className="text-base font-semibold"
+                          style={{ color: meta.color }}
+                        >
+                          {meta.arrow}
+                        </span>
                         <div className="min-w-0 flex-1">
                           <div className="truncate text-sm text-slate-100">
                             {otherName}
                           </div>
-                          <div className="text-[10px] text-slate-500">
+                          <div className="flex items-center gap-1.5 text-[10px] text-slate-500">
                             {edge.type}
                             {edge.weight != null
                               ? ` · w ${edge.weight.toFixed(2)}`
@@ -1035,6 +1129,18 @@ function NodeSidePanel({
                             {edge.frequency != null
                               ? ` · ×${edge.frequency}`
                               : ''}
+                            {initiativeColor && edge.primary_initiative ? (
+                              <span
+                                className="ml-1 inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 text-[9px]"
+                                style={{
+                                  background: `${initiativeColor}33`,
+                                  color: initiativeColor,
+                                }}
+                                title={`Initiative: ${edge.primary_initiative}`}
+                              >
+                                {edge.primary_initiative.replace(/_/g, ' ')}
+                              </span>
+                            ) : null}
                           </div>
                         </div>
                         {onEdgeReclassify && edgeId ? (

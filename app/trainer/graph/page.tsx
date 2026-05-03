@@ -69,6 +69,45 @@ function GraphPageInner() {
         </p>
       </div>
 
+      {/* How to read this graph — plain-English intro card */}
+      <Card className="border-emerald-500/30 bg-emerald-500/5">
+        <CardContent className="space-y-2 py-4 text-sm">
+          <div className="flex items-center gap-2 font-semibold text-emerald-100">
+            <Sparkles className="h-4 w-4 text-emerald-300" />
+            How to read this graph
+          </div>
+          <p className="text-emerald-50/90">
+            Every technique is a <strong>junction</strong>, not a leaf. Hover any
+            node and you&apos;ll see the chain it sits on light up in two directions:
+          </p>
+          <ul className="ml-1 space-y-1 text-emerald-50/85">
+            <li className="flex items-start gap-2">
+              <span className="mt-1.5 h-2 w-2 shrink-0 rounded-sm bg-emerald-400" />
+              <span>
+                <strong className="text-emerald-100">Forward (offense)</strong>{' '}
+                — emerald edges flow{' '}
+                <em>out</em> of the technique. These are the moves it sets up.
+              </span>
+            </li>
+            <li className="flex items-start gap-2">
+              <span className="mt-1.5 h-2 w-2 shrink-0 rounded-sm bg-rose-400" />
+              <span>
+                <strong className="text-rose-100">Reverse (counter)</strong>{' '}
+                — rose edges flow <em>into</em> the technique. These are the
+                setups that lead here, and the defenses that stop it.
+              </span>
+            </li>
+          </ul>
+          <p className="pt-1 text-emerald-50/85">
+            Click a node to open its side panel — connections are grouped as{' '}
+            <em>Sets up</em>, <em>Set up by</em>, <em>Counters</em>,{' '}
+            <em>Countered by</em> so the palindrome reads in plain English.
+            Try hovering <code className="rounded bg-emerald-950/70 px-1.5 py-0.5 text-emerald-100">1-2-3</code>{' '}
+            and follow the chain through to <code className="rounded bg-emerald-950/70 px-1.5 py-0.5 text-emerald-100">Stance Switch</code>.
+          </p>
+        </CardContent>
+      </Card>
+
       {recent && (recent.new_edges + recent.reinforced_edges + recent.mentions) > 0 ? (
         <Card className="border-violet-500/40 bg-violet-500/5">
           <CardContent className="flex flex-wrap items-center gap-2 py-3 text-sm">
