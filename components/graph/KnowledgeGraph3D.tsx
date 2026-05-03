@@ -792,22 +792,33 @@ export function KnowledgeGraph3D({
           nodeThreeObject={nodeThreeObject as (node: object) => object}
           nodeThreeObjectExtend={false}
           nodeColor={resolveNodeColor}
-          nodeOpacity={0.9}
-          nodeResolution={isLarge ? 4 : 6}
+          nodeOpacity={0.95}
+          nodeResolution={isLarge ? 4 : 8}
           nodeLabel={(node: object) => {
             const n = node as KGNode;
             return `${n.name} (${n.type})${n.subtitle ? `\n${n.subtitle}` : ''}`;
           }}
-          // Edges — no directional particles (extra motion fights stability)
+          // Edges
           linkColor={resolveLinkColor}
-          linkOpacity={isLarge ? 0.22 : 0.35}
+          linkOpacity={isLarge ? 0.45 : 0.6}
           linkWidth={resolveLinkWidth}
           linkResolution={isLarge ? 2 : 4}
-          // Layout — MW profile: settles fast, then quiets down
-          warmupTicks={isLarge ? 8 : 18}
-          cooldownTicks={isLarge ? 12 : 28}
-          d3AlphaDecay={isLarge ? 0.2 : 0.14}
-          d3VelocityDecay={0.4}
+          // Heavier edges spawn flowing particles — adds the gentle
+          // motion that signals "this graph is alive" without snapping.
+          linkDirectionalParticles={(l: object) =>
+            ((l as KGEdge).weight ?? 0) > 0.6 ? 2 : 0
+          }
+          linkDirectionalParticleSpeed={0.004}
+          linkDirectionalParticleWidth={1.6}
+          // Layout — flowy d3 profile (matches the canonical skill at
+          // ~/.claude/skills/agentic-kg-pipeline/assets/KnowledgeGraph3D.tsx).
+          // Slow alpha decay + low velocity decay + long cooldown = the
+          // graph keeps gently breathing for a while after a change,
+          // nodes you drag glide back into a relaxed equilibrium.
+          warmupTicks={20}
+          cooldownTicks={isLarge ? 60 : 120}
+          d3AlphaDecay={0.025}
+          d3VelocityDecay={0.28}
           onNodeHover={handleNodeHover}
           onNodeClick={handleNodeClick}
         />

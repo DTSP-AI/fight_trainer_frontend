@@ -8,6 +8,11 @@
  */
 
 // ---------- Enums ----------
+// Strictly the user-pickable martial arts. The DB's sport enum also
+// has 'universal' (for cross-art canonical techniques like the Musashi
+// + Sun Tzu canon) but that value is server-only — never offered in
+// any user-facing dropdown. API surfaces typed as `string` for the
+// `sport` field will see 'universal' come through transparently.
 export type Sport =
   | 'bjj'
   | 'mma'
