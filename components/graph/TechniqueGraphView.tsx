@@ -24,6 +24,12 @@ const DISCIPLINE_PALETTE: Record<string, string> = {
   guard: '#34d399',
   defense: '#fb923c',
   transition: '#f472b6',
+  movement: '#60a5fa',
+  uncategorized: '#94a3b8',
+  // Strategy canon — Musashi (gold) and Sun Tzu (crimson). Migration
+  // 016 seeded ~30 canonical principles with these category prefixes.
+  'principle.musashi': '#f59e0b',
+  'principle.sun_tzu': '#dc2626',
   default: '#94a3b8',
 };
 
@@ -142,14 +148,21 @@ export function TechniqueGraphView({
       else if (studentId && recommended.has(n.id)) type = 'recommended';
       else type = (n.discipline_class || 'default').toLowerCase();
 
+      const isCanonical = (n.discipline_class || '').startsWith('principle.');
       const tenants = n.stats?.distinct_tenant_count ?? 0;
       const mentions = n.stats?.analysis_mention_count ?? 0;
       return {
         id: n.id,
         name: n.name,
         type,
-        subtitle:
-          mentions > 0
+        // Canonical strategy principles render larger (1.4x) and gold/
+        // crimson — they're the trunk that empirical leaves hook into.
+        canonical: isCanonical,
+        subtitle: isCanonical
+          ? n.discipline_class === 'principle.musashi'
+            ? 'Musashi · Book of Five Rings'
+            : 'Sun Tzu · Art of War'
+          : mentions > 0
             ? `${mentions} mention${mentions === 1 ? '' : 's'} · ${tenants} gym${
                 tenants === 1 ? '' : 's'
               }`

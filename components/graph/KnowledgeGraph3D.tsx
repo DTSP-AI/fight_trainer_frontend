@@ -779,9 +779,13 @@ export function KnowledgeGraph3D({
           height={isFullscreen ? size.height : height}
           backgroundColor={backgroundColor}
           // Smooth controls — orbit, drag enabled, longer cooldown
-          // MW interaction model — trackball default, drag OFF.
-          // Drag-on caused "I tried to orbit but the node yanked" feel.
-          enableNodeDrag={false}
+          // Trackball camera (default). Click-drag empty space = orbit;
+          // right-click-drag = pan; wheel = zoom. With trackball the
+          // node-drag conflict that plagued orbit-mode is gone — the
+          // lib dispatches based on what the cursor is over, so users
+          // can grab and reposition individual nodes without hijacking
+          // the camera.
+          enableNodeDrag
           enableNavigationControls
           showNavInfo={false}
           // Custom three.js node objects (cached spheres + sprite labels)
