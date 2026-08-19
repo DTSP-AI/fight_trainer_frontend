@@ -6,16 +6,20 @@ import { Footer } from '@/components/marketing/footer';
 import { PaymentMethods } from '@/components/marketing/payment-methods';
 import { BRAND } from '@/lib/brand';
 import {
-  ONE_HOUR_TIERS,
-  THIRTY_MIN_TIERS,
+  getPublicPricingPackages,
+  type PublicPricingPackage,
+} from '@/lib/api/pricing';
+import {
   getCheckoutHref,
   getCheckoutLabel,
-  type PricingTier,
+  packagePriceLabel,
+  packagePriceUnit,
+  packagePerSessionLabel,
 } from '@/lib/payments';
 
 export const metadata: Metadata = {
   title: 'Private Coaching Pricing',
-  description: `Private coaching tailored to your goals — 1-hour and 30-minute sessions with ${BRAND.name}.`,
+  description: `Private coaching tailored to your goals — packages with ${BRAND.name}.`,
 };
 
 const INCLUDED = [
@@ -45,49 +49,91 @@ const POLICIES = [
   'Non-refundable.',
 ];
 
-function TierCard({ tier }: { tier: PricingTier }) {
+function durationLabel(minutes: number): string {
+  if (minutes === 60) return '1-Hour Private Coaching';
+  if (minutes === 30) return '30-Minute Private Coaching';
+  return `${minutes}-Minute Private Coaching`;
+}
+
+/** Group packages by session length, groups ordered longest-first, packages
+ *  within a group by their pricing_sort. */
+function groupByDuration(
+  packages: PublicPricingPackage[],
+): { minutes: number; label: string; packages: PublicPricingPackage[] }[] {
+  const byDuration = new Map<number, PublicPricingPackage[]>();
+  for (const p of packages) {
+    const arr = byDuration.get(p.default_duration_minutes) ?? [];
+    arr.push(p);
+    byDuration.set(p.default_duration_minutes, arr);
+  }
+  return [...byDuration.entries()]
+    .sort((a, b) => b[0] - a[0])
+    .map(([minutes, pkgs]) => ({
+      minutes,
+      label: durationLabel(minutes),
+      packages: pkgs.sort((a, b) => a.pricing_sort - b.pricing_sort),
+    }));
+}
+
+function PackageCard({ pkg }: { pkg: PublicPricingPackage }) {
+  const perSession = packagePerSessionLabel(pkg);
   return (
     <div
       className={`relative flex flex-col rounded-lg border bg-card p-6 ${
-        tier.popular
+        pkg.is_popular
           ? 'border-primary shadow-[0_0_0_1px_hsl(0_71%_42%/0.4)]'
           : 'border-border'
       }`}
     >
-      {tier.popular && (
+      {pkg.is_popular && (
         <span className="absolute -top-3 left-1/2 -translate-x-1/2 rounded-full bg-primary px-3 py-1 text-xs font-semibold uppercase tracking-wide text-primary-foreground">
           Most Popular
         </span>
       )}
-      <h3 className="text-lg font-semibold">{tier.name}</h3>
-      <p className="mt-1 text-xs font-medium uppercase tracking-wide text-primary">
-        {tier.cadence}
-      </p>
-      <p className="mt-4 text-sm text-muted-foreground">{tier.sessions}</p>
+      <h3 className="text-lg font-semibold">
+        {pkg.cadence_label ?? pkg.name}
+      </h3>
+      {pkg.cadence_label && (
+        <p className="mt-1 text-xs font-medium uppercase tracking-wide text-primary">
+          {pkg.cadence_label}
+        </p>
+      )}
+      {pkg.sessions_per_month ? (
+        <p className="mt-4 text-sm text-muted-foreground">
+          {pkg.sessions_per_month} sessions per month
+        </p>
+      ) : (
+        <p className="mt-4 text-sm text-muted-foreground">1 session</p>
+      )}
       <div className="mt-4 flex items-baseline gap-2">
         <span className="text-4xl font-semibold tracking-tight">
-          {tier.price}
+          {packagePriceLabel(pkg)}
         </span>
-        <span className="text-sm text-muted-foreground">{tier.priceUnit}</span>
+        <span className="text-sm text-muted-foreground">
+          {packagePriceUnit(pkg)}
+        </span>
       </div>
-      {tier.perSession && (
-        <p className="mt-2 text-sm text-muted-foreground">{tier.perSession}</p>
+      {perSession && (
+        <p className="mt-2 text-sm text-muted-foreground">{perSession}</p>
       )}
       <Button
         asChild
         size="lg"
-        variant={tier.popular ? 'default' : 'outline'}
+        variant={pkg.is_popular ? 'default' : 'outline'}
         className="mt-8"
       >
-        <a href={getCheckoutHref(tier)} rel="noopener noreferrer">
-          {getCheckoutLabel(tier)}
+        <a href={getCheckoutHref(pkg)} rel="noopener noreferrer">
+          {getCheckoutLabel(pkg)}
         </a>
       </Button>
     </div>
   );
 }
 
-export default function PricingPage() {
+export default async function PricingPage() {
+  const packages = await getPublicPricingPackages();
+  const groups = groupByDuration(packages);
+
   return (
     <>
       <NavBar />
@@ -110,41 +156,27 @@ export default function PricingPage() {
           </p>
         </div>
 
-        {/* 1-Hour Private Coaching */}
-        <section className="mt-20">
-          <div className="mx-auto max-w-3xl text-center">
-            <h2 className="text-2xl font-semibold tracking-tight md:text-3xl">
-              1-Hour Private Coaching
-            </h2>
-            <p className="mt-3 text-muted-foreground">
-              Perfect for technical development, full skill sessions, strategy,
-              and complete training plans.
-            </p>
-          </div>
-          <div className="mt-12 grid gap-6 md:grid-cols-2 lg:grid-cols-4">
-            {ONE_HOUR_TIERS.map((tier) => (
-              <TierCard key={tier.id} tier={tier} />
-            ))}
-          </div>
-        </section>
-
-        {/* 30-Minute Private Coaching */}
-        <section className="mt-20">
-          <div className="mx-auto max-w-3xl text-center">
-            <h2 className="text-2xl font-semibold tracking-tight md:text-3xl">
-              30-Minute Private Coaching
-            </h2>
-            <p className="mt-3 text-muted-foreground">
-              Perfect for focused skill work, specific techniques, and busy
-              schedules.
-            </p>
-          </div>
-          <div className="mx-auto mt-12 grid max-w-3xl gap-6 md:grid-cols-2">
-            {THIRTY_MIN_TIERS.map((tier) => (
-              <TierCard key={tier.id} tier={tier} />
-            ))}
-          </div>
-        </section>
+        {groups.length === 0 ? (
+          <p className="mx-auto mt-16 max-w-lg text-center text-muted-foreground">
+            Packages are being finalized. Check back shortly, or reach out to
+            book directly.
+          </p>
+        ) : (
+          groups.map((group) => (
+            <section key={group.minutes} className="mt-20">
+              <div className="mx-auto max-w-3xl text-center">
+                <h2 className="text-2xl font-semibold tracking-tight md:text-3xl">
+                  {group.label}
+                </h2>
+              </div>
+              <div className="mx-auto mt-12 grid max-w-6xl gap-6 md:grid-cols-2 lg:grid-cols-4">
+                {group.packages.map((pkg) => (
+                  <PackageCard key={pkg.id} pkg={pkg} />
+                ))}
+              </div>
+            </section>
+          ))
+        )}
 
         {/* Payment methods */}
         <PaymentMethods />

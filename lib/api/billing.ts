@@ -35,7 +35,17 @@ export interface TenantSettingsUpdate {
 export type Sport =
   | 'bjj' | 'mma' | 'muay_thai' | 'boxing' | 'wrestling' | 'kickboxing';
 
-export interface ServiceRow {
+// Pricing-page display layer — shared by ServiceRow / create / update.
+export interface ServicePricingFields {
+  include_on_pricing: boolean;
+  is_popular: boolean;
+  cadence_label?: string | null;
+  sessions_per_month?: number | null;
+  monthly_price_cents?: number | null;
+  pricing_sort: number;
+}
+
+export interface ServiceRow extends ServicePricingFields {
   id: string;
   tenant_id: string;
   name: string;
@@ -54,6 +64,12 @@ export interface ServiceCreateRequest {
   sport: Sport;
   default_duration_minutes: number;
   default_price_cents: number;
+  include_on_pricing?: boolean;
+  is_popular?: boolean;
+  cadence_label?: string | null;
+  sessions_per_month?: number | null;
+  monthly_price_cents?: number | null;
+  pricing_sort?: number;
 }
 
 export interface ServiceUpdateRequest {
@@ -63,6 +79,12 @@ export interface ServiceUpdateRequest {
   default_duration_minutes?: number;
   default_price_cents?: number;
   is_active?: boolean;
+  include_on_pricing?: boolean;
+  is_popular?: boolean;
+  cadence_label?: string | null;
+  sessions_per_month?: number | null;
+  monthly_price_cents?: number | null;
+  pricing_sort?: number;
 }
 
 export interface ScheduledSessionUpdateRequest {

@@ -557,6 +557,123 @@ function ServiceRowItem({
   );
 }
 
+// ---- Shared pricing-page fields (the "Include on Pricing Page" toggle) ----
+interface PricingFieldsState {
+  includeOnPricing: boolean;
+  isPopular: boolean;
+  cadenceLabel: string;
+  sessionsPerMonth: string;
+  monthlyPrice: string;
+}
+
+function pricingStateFromRow(s: ServiceRow): PricingFieldsState {
+  return {
+    includeOnPricing: s.include_on_pricing ?? false,
+    isPopular: s.is_popular ?? false,
+    cadenceLabel: s.cadence_label ?? '',
+    sessionsPerMonth: s.sessions_per_month != null ? String(s.sessions_per_month) : '',
+    monthlyPrice:
+      s.monthly_price_cents != null ? (s.monthly_price_cents / 100).toFixed(2) : '',
+  };
+}
+
+const EMPTY_PRICING: PricingFieldsState = {
+  includeOnPricing: false,
+  isPopular: false,
+  cadenceLabel: '',
+  sessionsPerMonth: '',
+  monthlyPrice: '',
+};
+
+/** Map form state → the service create/update pricing payload. */
+function pricingPayload(p: PricingFieldsState) {
+  return {
+    include_on_pricing: p.includeOnPricing,
+    is_popular: p.isPopular,
+    cadence_label: p.cadenceLabel.trim() || null,
+    sessions_per_month: p.sessionsPerMonth ? Number(p.sessionsPerMonth) : null,
+    monthly_price_cents: p.monthlyPrice
+      ? Math.round(Number(p.monthlyPrice) * 100)
+      : null,
+  };
+}
+
+function PricingFields({
+  value,
+  onChange,
+}: {
+  value: PricingFieldsState;
+  onChange: (next: PricingFieldsState) => void;
+}) {
+  const set = <K extends keyof PricingFieldsState>(
+    key: K,
+    v: PricingFieldsState[K],
+  ) => onChange({ ...value, [key]: v });
+
+  return (
+    <div className="space-y-3 rounded-md border border-dashed border-border p-3">
+      <label className="flex items-center gap-2 text-sm font-medium">
+        <input
+          type="checkbox"
+          className="h-4 w-4"
+          checked={value.includeOnPricing}
+          onChange={(e) => set('includeOnPricing', e.target.checked)}
+        />
+        Include on Pricing Page
+      </label>
+      {value.includeOnPricing && (
+        <div className="space-y-3 pl-6">
+          <div className="grid gap-3 md:grid-cols-3">
+            <div className="space-y-2">
+              <Label>Cadence label</Label>
+              <Input
+                value={value.cadenceLabel}
+                placeholder="2x per week"
+                onChange={(e) => set('cadenceLabel', e.target.value)}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Sessions / month</Label>
+              <Input
+                type="number"
+                min={1}
+                max={100}
+                value={value.sessionsPerMonth}
+                placeholder="8"
+                onChange={(e) => set('sessionsPerMonth', e.target.value)}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Monthly price ($)</Label>
+              <Input
+                type="number"
+                step="0.01"
+                min={0}
+                value={value.monthlyPrice}
+                placeholder="680"
+                onChange={(e) => set('monthlyPrice', e.target.value)}
+              />
+            </div>
+          </div>
+          <label className="flex items-center gap-2 text-sm">
+            <input
+              type="checkbox"
+              className="h-4 w-4"
+              checked={value.isPopular}
+              onChange={(e) => set('isPopular', e.target.checked)}
+            />
+            Flag as “Most Popular”
+          </label>
+          <p className="text-xs text-muted-foreground">
+            Duration = session length; Price = per-session. Leave sessions/month
+            &amp; monthly price blank for a single-session / drop-in package.
+          </p>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function EditServiceForm({
   s,
   onSaved,
@@ -571,6 +688,9 @@ function EditServiceForm({
   const [duration, setDuration] = useState(String(s.default_duration_minutes));
   const [price, setPrice] = useState((s.default_price_cents / 100).toFixed(2));
   const [description, setDescription] = useState(s.description ?? '');
+  const [pricing, setPricing] = useState<PricingFieldsState>(
+    pricingStateFromRow(s),
+  );
   const [busy, setBusy] = useState(false);
 
   async function submit(e: React.FormEvent) {
@@ -583,6 +703,7 @@ function EditServiceForm({
         default_duration_minutes: Number(duration),
         default_price_cents: Math.round(Number(price) * 100),
         description: description.trim() || undefined,
+        ...pricingPayload(pricing),
       });
       toast.success('Service updated');
       onSaved();
@@ -654,6 +775,7 @@ function EditServiceForm({
           assistKind="service_description"
         />
       </div>
+      <PricingFields value={pricing} onChange={setPricing} />
       <div className="flex gap-2">
         <Button type="submit" disabled={busy}>
           {busy ? 'Saving…' : 'Save changes'}
@@ -678,6 +800,7 @@ function NewServiceForm({
   const [duration, setDuration] = useState('60');
   const [price, setPrice] = useState('80');
   const [description, setDescription] = useState('');
+  const [pricing, setPricing] = useState<PricingFieldsState>(EMPTY_PRICING);
   const [busy, setBusy] = useState(false);
 
   async function submit(e: React.FormEvent) {
@@ -690,6 +813,7 @@ function NewServiceForm({
         default_duration_minutes: Number(duration),
         default_price_cents: Math.round(Number(price) * 100),
         description: description.trim() || undefined,
+        ...pricingPayload(pricing),
       });
       toast.success('Service created');
       onCreated();
@@ -766,6 +890,7 @@ function NewServiceForm({
           assistKind="service_description"
         />
       </div>
+      <PricingFields value={pricing} onChange={setPricing} />
       <div className="flex gap-2">
         <Button type="submit" disabled={busy}>
           {busy ? 'Saving…' : 'Save service'}
