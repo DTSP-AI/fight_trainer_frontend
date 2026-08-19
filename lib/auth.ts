@@ -58,19 +58,6 @@ export function getStudentIdFromUser(user: User | null): string | null {
   return typeof id === 'string' ? id : null;
 }
 
-export async function signInWithMagicLink(
-  email: string,
-  redirectTo?: string,
-): Promise<{ ok: boolean; error?: string }> {
-  const sb = getSupabaseBrowser();
-  const { error } = await sb.auth.signInWithOtp({
-    email,
-    options: redirectTo ? { emailRedirectTo: redirectTo } : undefined,
-  });
-  if (error) return { ok: false, error: error.message };
-  return { ok: true };
-}
-
 export async function signInWithPassword(
   email: string,
   password: string,

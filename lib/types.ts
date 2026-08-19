@@ -63,6 +63,7 @@ export type ApiResponse<T> = ApiSuccess<T> | ApiFailure;
 // ---------- Auth ----------
 export interface TrainerSignupRequest {
   email: string;
+  password: string;
   full_name: string;
   tenant_name: string;
   primary_sport: Sport;
@@ -71,12 +72,12 @@ export interface TrainerSignupRequest {
 export interface TrainerSignupResponse {
   tenant_id: string;
   user_id: string;
-  magic_link_sent: boolean;
 }
 
 export interface StudentInviteAcceptRequest {
   invite_token: string;
   full_name: string;
+  password: string;
 }
 
 // ---------- Domain rows ----------

@@ -14,7 +14,6 @@ import {
   getRoleFromUser,
   rolePathRoot,
   signInWithPassword,
-  signInWithMagicLink,
 } from '@/lib/auth';
 import { BRAND } from '@/lib/brand';
 
@@ -24,11 +23,9 @@ function LoginForm() {
   const next = params.get('next');
   const reason = params.get('reason');
 
-  const [mode, setMode] = useState<'password' | 'magic'>('password');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [submitting, setSubmitting] = useState(false);
-  const [magicSent, setMagicSent] = useState(false);
 
   async function onPasswordSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -50,26 +47,6 @@ function LoginForm() {
     router.replace(dest);
   }
 
-  async function onMagicSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    if (!email.trim()) {
-      toast.error('Email required');
-      return;
-    }
-    setSubmitting(true);
-    const redirect =
-      typeof window !== 'undefined'
-        ? `${window.location.origin}/auth/callback?next=${encodeURIComponent(next ?? '/')}`
-        : undefined;
-    const res = await signInWithMagicLink(email.trim(), redirect);
-    setSubmitting(false);
-    if (!res.ok) {
-      toast.error(res.error ?? 'Could not send link');
-      return;
-    }
-    setMagicSent(true);
-  }
-
   return (
     <Card>
       <CardHeader>
@@ -86,120 +63,50 @@ function LoginForm() {
             Auth is not configured. Contact your administrator.
           </p>
         ) : null}
-        {reason === 'callback_error' || reason === 'exchange_failed' ? (
-          <p className="mb-4 rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive">
-            Sign-in link failed. Try password sign-in below.
-          </p>
-        ) : null}
 
-        <div className="mb-4 flex gap-2">
-          <button
-            type="button"
-            onClick={() => setMode('password')}
-            className={`flex-1 rounded-md border px-3 py-1.5 text-sm transition ${
-              mode === 'password'
-                ? 'border-primary bg-primary/10 text-foreground'
-                : 'border-border text-muted-foreground hover:text-foreground'
-            }`}
-          >
-            Password
-          </button>
-          <button
-            type="button"
-            onClick={() => setMode('magic')}
-            className={`flex-1 rounded-md border px-3 py-1.5 text-sm transition ${
-              mode === 'magic'
-                ? 'border-primary bg-primary/10 text-foreground'
-                : 'border-border text-muted-foreground hover:text-foreground'
-            }`}
-          >
-            Magic link
-          </button>
-        </div>
-
-        {mode === 'password' ? (
-          <form className="space-y-4" onSubmit={onPasswordSubmit}>
-            <div className="space-y-2">
-              <Label htmlFor="email">Email</Label>
-              <Input
-                id="email"
-                type="email"
-                autoComplete="email"
-                placeholder="you@gym.com"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                required
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="password">Password</Label>
-              <Input
-                id="password"
-                type="password"
-                autoComplete="current-password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                required
-              />
-            </div>
-            <Button
-              type="submit"
-              className="w-full"
-              size="lg"
-              disabled={submitting}
-            >
-              {submitting ? 'Signing in…' : 'Sign in'}
-              {!submitting ? <ArrowRight className="h-4 w-4" /> : null}
-            </Button>
-            <p className="text-center text-sm">
-              New here?{' '}
-              <Link
-                href="/auth/signup"
-                className="text-foreground underline underline-offset-4"
-              >
-                Create an account
-              </Link>
-            </p>
-          </form>
-        ) : magicSent ? (
-          <div className="space-y-3">
-            <p className="text-sm">
-              Check <span className="font-semibold">{email}</span> — we sent a
-              one-tap sign-in link.
-            </p>
-            <button
-              type="button"
-              className="text-xs text-muted-foreground underline underline-offset-4"
-              onClick={() => setMagicSent(false)}
-            >
-              Try again
-            </button>
+        <form className="space-y-4" onSubmit={onPasswordSubmit}>
+          <div className="space-y-2">
+            <Label htmlFor="email">Email</Label>
+            <Input
+              id="email"
+              type="email"
+              autoComplete="email"
+              placeholder="you@gym.com"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              required
+            />
           </div>
-        ) : (
-          <form className="space-y-4" onSubmit={onMagicSubmit}>
-            <div className="space-y-2">
-              <Label htmlFor="magic_email">Email</Label>
-              <Input
-                id="magic_email"
-                type="email"
-                autoComplete="email"
-                placeholder="you@gym.com"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                required
-              />
-            </div>
-            <Button
-              type="submit"
-              className="w-full"
-              size="lg"
-              disabled={submitting}
+          <div className="space-y-2">
+            <Label htmlFor="password">Password</Label>
+            <Input
+              id="password"
+              type="password"
+              autoComplete="current-password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              required
+            />
+          </div>
+          <Button
+            type="submit"
+            className="w-full"
+            size="lg"
+            disabled={submitting}
+          >
+            {submitting ? 'Signing in…' : 'Sign in'}
+            {!submitting ? <ArrowRight className="h-4 w-4" /> : null}
+          </Button>
+          <p className="text-center text-sm">
+            New here?{' '}
+            <Link
+              href="/auth/signup"
+              className="text-foreground underline underline-offset-4"
             >
-              {submitting ? 'Sending…' : 'Send magic link'}
-              {!submitting ? <ArrowRight className="h-4 w-4" /> : null}
-            </Button>
-          </form>
-        )}
+              Create an account
+            </Link>
+          </p>
+        </form>
       </CardContent>
     </Card>
   );

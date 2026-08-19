@@ -17,6 +17,7 @@ function AcceptInviteForm() {
   const params = useSearchParams();
   const token = params.get('token') ?? '';
   const [fullName, setFullName] = useState('');
+  const [password, setPassword] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
   async function onSubmit(e: React.FormEvent) {
@@ -29,13 +30,18 @@ function AcceptInviteForm() {
       toast.error('Your name is required');
       return;
     }
+    if (password.length < 8) {
+      toast.error('Password must be at least 8 characters');
+      return;
+    }
     setSubmitting(true);
     try {
       await authApi.acceptStudentInvite({
         invite_token: token,
         full_name: fullName.trim(),
+        password,
       });
-      toast.success('Invite accepted — check email for sign-in link');
+      toast.success('Account created — sign in with your email and password');
       router.replace('/auth/login');
     } catch (err) {
       toast.error(describeApiError(err));
@@ -67,6 +73,22 @@ function AcceptInviteForm() {
               />
               <p className="text-xs text-muted-foreground">
                 This is how your coach sees you in their roster.
+              </p>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="password">Create a password</Label>
+              <Input
+                id="password"
+                type="password"
+                autoComplete="new-password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                required
+                minLength={8}
+              />
+              <p className="text-xs text-muted-foreground">
+                At least 8 characters. You&apos;ll sign in with your email and
+                this password.
               </p>
             </div>
             <Button
