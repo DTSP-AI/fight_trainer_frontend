@@ -26,6 +26,9 @@ export function Footer() {
           <Link href="/privacy" className="hover:text-foreground">
             Privacy
           </Link>
+          <Link href="/auth/signup/coach" className="hover:text-foreground">
+            For coaches
+          </Link>
           <Link href="/auth/login" className="hover:text-foreground">
             Sign in
           </Link>

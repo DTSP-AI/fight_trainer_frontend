@@ -19,7 +19,7 @@ export function CTASection() {
           <div className="mt-6 flex justify-center">
             <Button asChild size="lg">
               <Link href="/auth/signup">
-                Start Free
+                Get Started
                 <ArrowRight className="h-4 w-4" />
               </Link>
             </Button>

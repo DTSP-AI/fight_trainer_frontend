@@ -28,7 +28,7 @@ export function NavBar() {
             <Link href="/auth/login">Sign in</Link>
           </Button>
           <Button asChild size="sm">
-            <Link href="/auth/signup">Start Free</Link>
+            <Link href="/auth/signup">Get Started</Link>
           </Button>
         </div>
       </div>
