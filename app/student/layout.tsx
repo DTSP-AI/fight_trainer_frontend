@@ -1,6 +1,12 @@
 'use client';
 
-import { CalendarDays, ListChecks, Network, Sparkles } from 'lucide-react';
+import {
+  CalendarDays,
+  ClipboardList,
+  ListChecks,
+  Network,
+  Sparkles,
+} from 'lucide-react';
 import { AppHeader } from '@/components/common/app-header';
 import { RoleGate } from '@/components/common/role-gate';
 import { Sidebar, type SidebarItem } from '@/components/common/sidebar';
@@ -10,6 +16,11 @@ const NAV: SidebarItem[] = [
     href: '/student/schedule',
     label: 'Schedule',
     icon: <CalendarDays className="h-4 w-4" />,
+  },
+  {
+    href: '/student/intake',
+    label: 'Intake',
+    icon: <ClipboardList className="h-4 w-4" />,
   },
   {
     href: '/student/sessions',
