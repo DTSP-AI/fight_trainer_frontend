@@ -98,6 +98,14 @@ function LoginForm() {
             {!submitting ? <ArrowRight className="h-4 w-4" /> : null}
           </Button>
           <p className="text-center text-sm">
+            <Link
+              href="/auth/forgot"
+              className="text-muted-foreground underline underline-offset-4 hover:text-foreground"
+            >
+              Forgot password?
+            </Link>
+          </p>
+          <p className="text-center text-sm">
             New here?{' '}
             <Link
               href="/auth/signup"

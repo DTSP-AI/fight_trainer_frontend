@@ -73,6 +73,33 @@ export async function signOut(): Promise<void> {
   await sb.auth.signOut();
 }
 
+/**
+ * Send a password-reset email via Supabase Auth. The link lands the user on
+ * `redirectTo` with a recovery session, where they set a new password.
+ */
+export async function sendPasswordReset(
+  email: string,
+  redirectTo?: string,
+): Promise<{ ok: boolean; error?: string }> {
+  const sb = getSupabaseBrowser();
+  const { error } = await sb.auth.resetPasswordForEmail(
+    email,
+    redirectTo ? { redirectTo } : undefined,
+  );
+  if (error) return { ok: false, error: error.message };
+  return { ok: true };
+}
+
+/** Set a new password for the currently-authenticated (or recovery) session. */
+export async function updatePassword(
+  password: string,
+): Promise<{ ok: boolean; error?: string }> {
+  const sb = getSupabaseBrowser();
+  const { error } = await sb.auth.updateUser({ password });
+  if (error) return { ok: false, error: error.message };
+  return { ok: true };
+}
+
 export function rolePathRoot(role: UserRole | null): string {
   switch (role) {
     case 'trainer':
