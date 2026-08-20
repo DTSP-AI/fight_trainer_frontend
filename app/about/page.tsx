@@ -4,8 +4,8 @@ import { Footer } from '@/components/marketing/footer';
 import { BRAND } from '@/lib/brand';
 
 export const metadata: Metadata = {
-  title: 'About',
-  description: `How ${BRAND.name} multiplies what a coach already does.`,
+  title: 'How it works',
+  description: `How private coaching with ${BRAND.name} turns each session into progress.`,
 };
 
 export default function AboutPage() {
@@ -14,42 +14,41 @@ export default function AboutPage() {
       <NavBar />
       <main className="mx-auto max-w-3xl px-4 py-16 md:px-8 md:py-24">
         <h1 className="text-4xl font-semibold tracking-tight md:text-5xl">
-          Built for the coach in the room, not the platform team.
+          Every session turns into progress.
         </h1>
         <div className="mt-8 space-y-6 text-muted-foreground md:text-lg">
           <p>
-            Generic personal-training software doesn&apos;t know combat sport.
-            Your students don&apos;t need another habit-tracker — they need to
-            see the technique they drilled tonight, in the hands of the people
-            who pioneered it.
+            Generic fitness apps don&apos;t know combat sport. You don&apos;t
+            need another habit tracker — you need to see the technique you
+            drilled tonight in the hands of the people who pioneered it, and a
+            clear cue to carry into the next round.
           </p>
           <p>
-            {BRAND.name} is a workflow you stand inside, not a chatbot you talk
-            to. Log a session in 30 seconds. Within 90 seconds, every student
-            gets a personal clip from canonical fight footage of the technique
-            you covered — with a 2–4 sentence cue you wrote.
+            {BRAND.name} is private coaching with a memory. Train with your
+            coach, and within about 90 seconds you get a personal clip from
+            canonical fight footage of exactly what you worked on — plus a short
+            cue written for you.
           </p>
-          <p className="text-foreground">How it actually goes:</p>
+          <p className="text-foreground">How a session becomes progress:</p>
           <ol className="list-decimal space-y-3 pl-6">
             <li>
-              <span className="text-foreground">You log.</span> Pick the
-              technique, drop a cue, hit save. Voice mode if your hands are
-              taped.
+              <span className="text-foreground">You train.</span> Drill the
+              technique with your coach, live on the mat.
             </li>
             <li>
-              <span className="text-foreground">The pipeline finds the clip.</span>{' '}
-              Marcelo, Khabib, Saenchai, Lomachenko, the receipts. Same
-              footage every student of yours sees for that technique — the
-              cue is what&apos;s personal.
+              <span className="text-foreground">It gets matched.</span> What you
+              drilled is matched to the highest level of the sport — Marcelo,
+              Khabib, Saenchai, Lomachenko, the receipts.
             </li>
             <li>
-              <span className="text-foreground">Students get the clip.</span>{' '}
-              In their portal, on their phone, before they leave the building.
+              <span className="text-foreground">You get your clip.</span> On
+              your phone, in your portal, before you even leave the building —
+              with a 2–4 sentence cue from your coach.
             </li>
             <li>
-              <span className="text-foreground">You watch the loop.</span>{' '}
-              Inactivity radar. Plan adjustments proposed by the pipeline,
-              never auto-applied. You stay the coach.
+              <span className="text-foreground">You improve.</span> Your plan
+              adjusts as you progress, and your coach sees when you drift — so
+              you stay on track instead of fading out.
             </li>
           </ol>
         </div>

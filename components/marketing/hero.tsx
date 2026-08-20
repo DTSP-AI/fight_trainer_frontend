@@ -29,19 +29,19 @@ export function Hero() {
         <div className="mx-auto max-w-4xl px-4 py-20 text-center md:px-8 md:py-32 lg:py-40">
           <m.div className="flex flex-col items-center" {...fade}>
             <span className="mb-6 inline-flex w-fit items-center rounded-full border border-border bg-card/70 px-3 py-1 text-xs uppercase tracking-wider text-muted-foreground backdrop-blur">
-              For solo BJJ / MMA / Muay Thai / Boxing coaches
+              Private coaching · BJJ · MMA · Muay Thai · Boxing
             </span>
             <h1 className="text-4xl font-semibold leading-tight tracking-tight md:text-5xl lg:text-6xl">
               {BRAND.tagline}
             </h1>
             <p className="mt-6 max-w-2xl text-base text-muted-foreground md:text-lg">
-              Log a session. Within 90 seconds, every student gets a personal
-              clip from canonical fight footage of the technique they drilled —
-              with a 2–4 sentence cue you wrote.
+              After every session, get a personal clip of the technique you
+              drilled — pulled from canonical fight footage of the greats — with
+              a cue from your coach. Usually within 90 seconds.
             </p>
             <p className="mt-3 max-w-2xl text-sm text-muted-foreground/80">
-              No chatbot. No upsell theatre. Infrastructure that multiplies
-              what a coach already does.
+              Focused coaching, consistent reps, and immediate feedback — the
+              fastest way to actually improve.
             </p>
             <div className="mt-10 flex flex-wrap justify-center gap-3">
               <Button asChild size="lg">

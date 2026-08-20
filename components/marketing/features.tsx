@@ -6,23 +6,23 @@ import { Clock4, Library, Layers, Repeat } from 'lucide-react';
 const FEATURES = [
   {
     icon: Clock4,
-    title: '90-second clip delivery',
-    body: 'Log a session, every student gets their personal clip and cue before you close the laptop.',
+    title: 'Personal clips, fast',
+    body: 'After every session you get a clip of the exact technique you drilled — usually within 90 seconds of leaving the mat.',
   },
   {
     icon: Library,
-    title: 'Canonical fight library',
-    body: 'Match what your student drilled to the highest level of the sport — Marcelo, Khabib, Saenchai, Lomachenko, the receipts.',
+    title: 'See it done right',
+    body: 'Your technique in the hands of the greats — Marcelo, Khabib, Saenchai, Lomachenko. The highest level of the sport, matched to what you trained.',
   },
   {
     icon: Layers,
-    title: 'Weekly plan, session-level adjustments',
-    body: 'Mesocycle in one editor. Pipeline proposes adjustments after frustration or breakthrough — you ack, never auto-applied.',
+    title: 'A real plan',
+    body: 'A weekly structure your coach adjusts as you progress — tuned after a breakthrough or a rough night, never on autopilot.',
   },
   {
     icon: Repeat,
-    title: 'Inactivity radar',
-    body: 'Find the students drifting before they ghost you. Quiet alerts, not noise.',
+    title: 'Stay accountable',
+    body: 'When you go quiet, your coach knows — and pulls you back in before a break turns into quitting.',
   },
 ];
 
@@ -43,9 +43,9 @@ export function Features() {
               The loop
             </h2>
             <p className="mt-4 text-muted-foreground md:text-lg">
-              Generic PT software doesn&apos;t know combat sport. Your students
-              need to see the technique they drilled tonight, in the hands of
-              the people who pioneered it. That&apos;s the loop.
+              You drill it tonight. You see it done by the people who pioneered
+              it. You carry a cue into next session and do it better. That&apos;s
+              the loop — and it&apos;s how you actually get good.
             </p>
           </div>
 

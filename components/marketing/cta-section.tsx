@@ -10,11 +10,11 @@ export function CTASection() {
       <div className="mx-auto max-w-7xl px-4 py-20 md:px-8 md:py-28">
         <div className="rounded-lg border border-border bg-card p-8 text-center md:p-14">
           <h2 className="text-2xl font-semibold tracking-tight md:text-3xl">
-            Multiply your gym, not your hours.
+            Train with intent.
           </h2>
           <p className="mx-auto mt-3 max-w-xl text-muted-foreground">
-            Pilot pricing for the first 5 coaches we onboard. Direct access to
-            the team that builds it.
+            Private coaching tailored to your goals. See the packages and start
+            when you&apos;re ready.
           </p>
           <div className="mt-6 flex justify-center">
             <Button asChild size="lg">
