@@ -7,6 +7,7 @@ import {
   Film,
   Library,
   Network,
+  Plug,
   Receipt,
   Sparkles,
   Trophy,
@@ -36,6 +37,11 @@ const NAV: SidebarItem[] = [
     href: '/trainer/settings/payments',
     label: 'Payments',
     icon: <Wallet className="h-4 w-4" />,
+  },
+  {
+    href: '/trainer/settings/integrations',
+    label: 'Integrations',
+    icon: <Plug className="h-4 w-4" />,
   },
 ];
 

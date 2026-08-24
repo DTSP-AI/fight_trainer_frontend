@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from 'next';
 import { Toaster } from '@/components/ui/sonner';
 import { ErrorBoundary } from '@/components/common/error-boundary';
+import { SwRegister } from '@/components/common/sw-register';
 import { BRAND } from '@/lib/brand';
 import './globals.css';
 
@@ -12,6 +13,7 @@ export const metadata: Metadata = {
   description: BRAND.tagline,
   applicationName: BRAND.name,
   authors: [{ name: BRAND.name }],
+  manifest: '/manifest.webmanifest',
 };
 
 export const viewport: Viewport = {
@@ -30,6 +32,7 @@ export default function RootLayout({
       <body>
         <ErrorBoundary>{children}</ErrorBoundary>
         <Toaster />
+        <SwRegister />
       </body>
     </html>
   );

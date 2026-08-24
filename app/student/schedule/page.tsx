@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { LoadingState } from '@/components/common/loading-state';
 import { EmptyState } from '@/components/common/empty-state';
+import { PushToggle } from '@/components/common/push-toggle';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { calendarApi, type CalendarEvent } from '@/lib/api/calendar';
@@ -81,11 +82,14 @@ export default function StudentSchedulePage() {
 
   return (
     <div className="mx-auto max-w-3xl space-y-6">
-      <div>
-        <h1 className="text-3xl font-semibold tracking-tight">Schedule</h1>
-        <p className="mt-1 text-sm text-muted-foreground">
-          Your upcoming and recent sessions. Your coach manages dates.
-        </p>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h1 className="text-3xl font-semibold tracking-tight">Schedule</h1>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Your upcoming and recent sessions. Your coach manages dates.
+          </p>
+        </div>
+        <PushToggle />
       </div>
 
       <section className="space-y-2">
