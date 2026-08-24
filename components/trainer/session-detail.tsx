@@ -8,18 +8,20 @@ import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { LoadingState } from '@/components/common/loading-state';
 import { EmptyState } from '@/components/common/empty-state';
-import { sessionsApi } from '@/lib/api/sessions';
+import {
+  sessionsApi,
+  type SessionDetailWithLibrary,
+} from '@/lib/api/sessions';
 import { describeApiError } from '@/lib/api';
 import { formatDate, formatRelative, formatSecondsToClock } from '@/lib/utils';
 import { buildYouTubeEmbedUrl } from '@/lib/youtube';
-import type { SessionDetailResponse } from '@/lib/types';
 
 interface SessionDetailProps {
   sessionId: string;
 }
 
 export function SessionDetail({ sessionId }: SessionDetailProps) {
-  const [data, setData] = useState<SessionDetailResponse | null>(null);
+  const [data, setData] = useState<SessionDetailWithLibrary | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [reprocessing, setReprocessing] = useState(false);
 
@@ -186,36 +188,64 @@ export function SessionDetail({ sessionId }: SessionDetailProps) {
           ) : (
             clip_deliveries.map((d) => {
               // The trainer view uses the same iframe as the student does so
-              // the trainer can verify what the student is seeing.
+              // the trainer can verify what the student is seeing. The
+              // youtube_id comes from the joined fights row — when the fight
+              // has been deleted there is nothing to embed, so we drop the
+              // player and show the delivery metadata full-width.
+              const youtubeId = d.fights?.youtube_id ?? null;
+              const techniqueName = d.techniques?.name ?? null;
+              const fightTitle = d.fights?.title ?? null;
               return (
                 <div
                   key={d.id}
                   className="rounded-md border border-border bg-background p-4"
                 >
-                  <div className="grid gap-4 md:grid-cols-2">
-                    <div className="aspect-video overflow-hidden rounded">
-                      <iframe
-                        title={`Clip ${d.id}`}
-                        src={buildYouTubeEmbedUrl(
-                          // youtube_id isn't on ClipDelivery — trainer view
-                          // surfaces the delivery message + range; full preview
-                          // is in the student's feed. If the API surfaces the
-                          // youtube_id later this swaps in trivially.
-                          'placeholder',
-                          d.timestamp_start_seconds,
-                          d.timestamp_end_seconds,
-                        )}
-                        allow="accelerometer; clipboard-write; encrypted-media; picture-in-picture"
-                        loading="lazy"
-                        className="h-full w-full"
-                      />
-                    </div>
+                  <div
+                    className={
+                      youtubeId ? 'grid gap-4 md:grid-cols-2' : 'grid gap-4'
+                    }
+                  >
+                    {youtubeId ? (
+                      <div className="aspect-video overflow-hidden rounded">
+                        <iframe
+                          title={
+                            techniqueName
+                              ? `${techniqueName} clip`
+                              : `Clip ${d.id}`
+                          }
+                          src={buildYouTubeEmbedUrl(
+                            youtubeId,
+                            d.timestamp_start_seconds,
+                            d.timestamp_end_seconds,
+                          )}
+                          allow="accelerometer; clipboard-write; encrypted-media; picture-in-picture"
+                          loading="lazy"
+                          className="h-full w-full"
+                        />
+                      </div>
+                    ) : null}
                     <div>
-                      <div className="text-xs text-muted-foreground">
+                      {techniqueName ? (
+                        <div className="text-sm font-semibold capitalize">
+                          {techniqueName}
+                        </div>
+                      ) : null}
+                      {fightTitle ? (
+                        <div className="mt-0.5 text-xs text-muted-foreground">
+                          {fightTitle}
+                        </div>
+                      ) : null}
+                      <div className="mt-1 text-xs text-muted-foreground">
                         Delivered {formatRelative(d.delivered_at)} ·{' '}
                         {formatSecondsToClock(d.timestamp_start_seconds)} –{' '}
                         {formatSecondsToClock(d.timestamp_end_seconds)}
                       </div>
+                      {!youtubeId ? (
+                        <p className="mt-2 text-xs text-amber-300">
+                          Source fight is no longer in the library — no preview
+                          available.
+                        </p>
+                      ) : null}
                       <p className="mt-2 text-sm leading-relaxed">
                         {d.delivery_message}
                       </p>

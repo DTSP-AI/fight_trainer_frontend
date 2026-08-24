@@ -204,6 +204,13 @@ export interface InvoicePublicPayload {
   };
 }
 
+/** Shape of models/billing.py::StripeCheckoutResponse. */
+export interface StripeCheckoutResponse {
+  checkout_url: string;
+  session_id: string;
+  amount_cents: number;
+}
+
 export interface SendNotificationResult {
   status: 'sent' | 'skipped' | 'failed';
   notification_id?: string | null;
@@ -332,6 +339,12 @@ export const billingApi = {
   getPublicInvoice: (token: string) =>
     apiClient.get<InvoicePublicPayload>(
       `/api/invoices/public/${encodeURIComponent(token)}`,
+      { authed: false },
+    ),
+  startPublicInvoiceCheckout: (token: string) =>
+    apiClient.post<StripeCheckoutResponse>(
+      `/api/invoices/public/${encodeURIComponent(token)}/checkout`,
+      {},
       { authed: false },
     ),
 

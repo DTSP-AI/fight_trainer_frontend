@@ -1,5 +1,6 @@
 import { Suspense } from 'react';
 import { PlanEditor } from '@/components/trainer/plan-editor';
+import { PlanAdjustmentsPanel } from '@/components/trainer/plan-adjustments-panel';
 import { LoadingState } from '@/components/common/loading-state';
 
 export default function TrainerPlansPage() {
@@ -11,6 +12,17 @@ export default function TrainerPlansPage() {
           Mesocycle in one editor. Adjustments propose — you approve.
         </p>
       </div>
+      <section className="space-y-3">
+        <div>
+          <h2 className="text-xl font-semibold">Pending AI adjustments</h2>
+          <p className="text-sm text-muted-foreground">
+            The pipeline proposes off session signals. Nothing changes until you
+            accept.
+          </p>
+        </div>
+        <PlanAdjustmentsPanel />
+      </section>
+
       <Suspense fallback={<LoadingState />}>
         <PlanEditor />
       </Suspense>
