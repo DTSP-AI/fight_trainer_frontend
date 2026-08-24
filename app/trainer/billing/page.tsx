@@ -1,6 +1,14 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import {
+  Suspense,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
+import { useSearchParams } from 'next/navigation';
 import {
   AlertTriangle,
   Bell,
@@ -23,6 +31,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { EmptyState } from '@/components/common/empty-state';
+import { LoadingState } from '@/components/common/loading-state';
 import { AssistedTextarea } from '@/components/common/assisted-textarea';
 import { SessionsCalendar } from '@/components/trainer/sessions-calendar';
 import {
@@ -89,6 +98,21 @@ const SCHEDULE_STATUS_VARIANTS: Record<
 // ============================================================================
 
 export default function TrainerBillingHubPage() {
+  // useSearchParams requires a Suspense boundary during prerender.
+  return (
+    <Suspense fallback={<LoadingState />}>
+      <BillingHubContent />
+    </Suspense>
+  );
+}
+
+function BillingHubContent() {
+  // Deep links from the student detail page: ?student=<id>&tab=schedule
+  const searchParams = useSearchParams();
+  const preselectStudentId = searchParams.get('student') ?? '';
+  const wantsSchedule = searchParams.get('tab') === 'schedule';
+  const sessionsSectionRef = useRef<HTMLElement | null>(null);
+
   const [students, setStudents] = useState<Student[]>([]);
   const [services, setServices] = useState<ServiceRow[]>([]);
   const [packages, setPackages] = useState<PackageRow[]>([]);
@@ -163,6 +187,16 @@ export default function TrainerBillingHubPage() {
   useEffect(() => {
     void refresh();
   }, [refresh]);
+
+  // ?tab=schedule — open the scheduling form and bring it into view.
+  useEffect(() => {
+    if (!wantsSchedule) return;
+    setScheduleFormOpen(true);
+    sessionsSectionRef.current?.scrollIntoView({
+      behavior: 'smooth',
+      block: 'start',
+    });
+  }, [wantsSchedule]);
 
   const studentMap = useMemo(
     () => new Map(students.map((s) => [s.id, s])),
@@ -285,11 +319,12 @@ export default function TrainerBillingHubPage() {
           studentMap={studentMap}
           serviceMap={serviceMap}
           onChanged={refresh}
+          defaultStudentId={preselectStudentId}
         />
       </section>
 
       {/* ───────────────── Sessions ───────────────── */}
-      <section className="space-y-3">
+      <section className="space-y-3" ref={sessionsSectionRef}>
         <SectionHeader
           icon={<CalendarPlus className="h-5 w-5" />}
           title="Sessions"
@@ -308,6 +343,7 @@ export default function TrainerBillingHubPage() {
               if (!next) setPrefillDateTime(undefined);
             }}
             defaultDateTime={prefillDateTime}
+            defaultStudentId={preselectStudentId}
           />
           <div className="flex gap-1 rounded-md border border-border p-1">
             <Button
@@ -914,6 +950,7 @@ function PackagesPanel({
   studentMap,
   serviceMap,
   onChanged,
+  defaultStudentId,
 }: {
   students: Student[];
   services: ServiceRow[];
@@ -921,6 +958,7 @@ function PackagesPanel({
   studentMap: Map<string, Student>;
   serviceMap: Map<string, ServiceRow>;
   onChanged: () => void;
+  defaultStudentId?: string;
 }) {
   const [open, setOpen] = useState(false);
 
@@ -949,6 +987,7 @@ function PackagesPanel({
           <NewPackageForm
             students={students}
             services={services}
+            defaultStudentId={defaultStudentId}
             onCreated={() => {
               setOpen(false);
               onChanged();
@@ -1084,13 +1123,15 @@ function NewPackageForm({
   services,
   onCreated,
   onCancel,
+  defaultStudentId,
 }: {
   students: Student[];
   services: ServiceRow[];
   onCreated: () => void;
   onCancel: () => void;
+  defaultStudentId?: string;
 }) {
-  const [studentId, setStudentId] = useState('');
+  const [studentId, setStudentId] = useState(defaultStudentId ?? '');
   const [serviceId, setServiceId] = useState('');
   const [totalSessions, setTotalSessions] = useState('10');
   const [price, setPrice] = useState('80');
@@ -1221,6 +1262,7 @@ function ScheduleNewForm({
   open,
   onOpenChange,
   defaultDateTime,
+  defaultStudentId,
 }: {
   students: Student[];
   services: ServiceRow[];
@@ -1229,8 +1271,9 @@ function ScheduleNewForm({
   open: boolean;
   onOpenChange: (next: boolean) => void;
   defaultDateTime?: string;
+  defaultStudentId?: string;
 }) {
-  const [studentId, setStudentId] = useState('');
+  const [studentId, setStudentId] = useState(defaultStudentId ?? '');
   const [packageId, setPackageId] = useState('');
   const [serviceId, setServiceId] = useState('');
   const [scheduledFor, setScheduledFor] = useState(defaultDateTime ?? '');
@@ -1239,6 +1282,11 @@ function ScheduleNewForm({
   useEffect(() => {
     if (defaultDateTime) setScheduledFor(defaultDateTime);
   }, [defaultDateTime]);
+
+  // Adopt a student deep-linked from their detail page (?student=<id>).
+  useEffect(() => {
+    if (defaultStudentId) setStudentId(defaultStudentId);
+  }, [defaultStudentId]);
   const [duration, setDuration] = useState('60');
   const [price, setPrice] = useState('80');
   const [notes, setNotes] = useState('');

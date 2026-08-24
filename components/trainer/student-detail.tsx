@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { Mail, Plus, Trash2 } from 'lucide-react';
+import { CalendarPlus, Mail, Plus, Receipt, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -132,6 +132,18 @@ export function StudentDetail({ studentId }: StudentDetailProps) {
           <Button asChild variant="outline">
             <Link href={`/trainer/plans?studentId=${student.id}`}>
               Edit plan
+            </Link>
+          </Button>
+          <Button asChild variant="outline">
+            <Link href={`/trainer/billing?student=${student.id}&tab=schedule`}>
+              <CalendarPlus className="h-4 w-4" />
+              Book session
+            </Link>
+          </Button>
+          <Button asChild variant="outline">
+            <Link href={`/trainer/students/${student.id}/billing`}>
+              <Receipt className="h-4 w-4" />
+              Billing &amp; invoices
             </Link>
           </Button>
           {student.invite_email &&

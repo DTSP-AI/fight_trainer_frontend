@@ -1,15 +1,15 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { useParams } from 'next/navigation';
-import { Check, Copy, ExternalLink } from 'lucide-react';
+import { Suspense, useEffect, useState } from 'react';
+import { useParams, useSearchParams } from 'next/navigation';
+import { Check, Copy, CreditCard, ExternalLink } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { LoadingState } from '@/components/common/loading-state';
 import { billingApi, type InvoicePublicPayload } from '@/lib/api/billing';
-import { describeApiError } from '@/lib/api';
+import { ApiClientError, describeApiError } from '@/lib/api';
 
 function formatCents(cents: number, currency = 'USD'): string {
   return new Intl.NumberFormat('en-US', {
@@ -32,10 +32,24 @@ function formatDate(iso?: string | null): string {
 }
 
 export default function PublicInvoicePage() {
+  // useSearchParams requires a Suspense boundary during prerender.
+  return (
+    <Suspense fallback={<LoadingState label="Loading invoice…" />}>
+      <PublicInvoiceContent />
+    </Suspense>
+  );
+}
+
+function PublicInvoiceContent() {
   const params = useParams();
+  const searchParams = useSearchParams();
   const token = String(params?.token ?? '');
   const [data, setData] = useState<InvoicePublicPayload | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // Set when the backend reports Stripe isn't configured — hides the CTA so
+  // the student is left with the Venmo/Zelle options that DO work.
+  const [stripeUnavailable, setStripeUnavailable] = useState(false);
+  const [payBusy, setPayBusy] = useState(false);
 
   useEffect(() => {
     if (!token) return;
@@ -44,6 +58,43 @@ export default function PublicInvoicePage() {
       .then(setData)
       .catch((err) => setError(describeApiError(err)));
   }, [token]);
+
+  // Stripe sends the student back to ?paid=1 after a successful checkout.
+  // The webhook settles the balance asynchronously — toast immediately, then
+  // refetch a couple of times so the on-screen balance catches up.
+  useEffect(() => {
+    if (searchParams.get('paid') !== '1' || !token) return;
+    toast.success('Payment received — thanks!', {
+      description: 'Your coach sees it on their end within a minute.',
+    });
+    const timers = [2500, 8000].map((ms) =>
+      setTimeout(() => {
+        billingApi.getPublicInvoice(token).then(setData).catch(() => undefined);
+      }, ms),
+    );
+    return () => timers.forEach(clearTimeout);
+  }, [searchParams, token]);
+
+  async function payOnline() {
+    setPayBusy(true);
+    try {
+      const res = await billingApi.startPublicInvoiceCheckout(token);
+      window.location.assign(res.checkout_url);
+    } catch (err) {
+      if (
+        err instanceof ApiClientError &&
+        (err.code === 'STRIPE_NOT_CONFIGURED' || err.status === 503)
+      ) {
+        setStripeUnavailable(true);
+        toast('Online payment isn’t enabled', {
+          description: 'Use one of the payment options below instead.',
+        });
+      } else {
+        toast.error(describeApiError(err));
+      }
+      setPayBusy(false);
+    }
+  }
 
   if (error) {
     return (
@@ -68,6 +119,11 @@ export default function PublicInvoicePage() {
   const isPaid = inv.status === 'paid' || inv.amount_due_cents === 0;
   const venmo = data.payment_methods.venmo;
   const zelle = data.payment_methods.zelle;
+  const canPayOnline =
+    inv.status !== 'paid' &&
+    inv.status !== 'cancelled' &&
+    inv.amount_due_cents > 0 &&
+    !stripeUnavailable;
 
   return (
     <div className="min-h-screen bg-background py-8">
@@ -117,6 +173,32 @@ export default function PublicInvoicePage() {
           <p className="rounded-md border border-border bg-card/60 p-4 text-sm text-muted-foreground">
             {data.trainer.payment_instructions}
           </p>
+        ) : null}
+
+        {/* Card / online payment — the fastest path, so it leads. */}
+        {canPayOnline ? (
+          <Card>
+            <CardContent className="space-y-3 py-5">
+              <div className="flex items-baseline justify-between">
+                <p className="text-base font-semibold">Pay by card</p>
+                <span className="text-xs text-muted-foreground">
+                  Secure checkout
+                </span>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Pay {due} now — settles instantly, no follow-up needed.
+              </p>
+              <Button
+                size="lg"
+                className="btn-3d-primary w-full"
+                disabled={payBusy}
+                onClick={payOnline}
+              >
+                <CreditCard className="mr-2 h-4 w-4" />
+                {payBusy ? 'Opening checkout…' : 'Pay online'}
+              </Button>
+            </CardContent>
+          </Card>
         ) : null}
 
         {/* Payment buttons */}
