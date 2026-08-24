@@ -20,6 +20,17 @@ export const integrationsApi = {
   googleOAuthStart: () =>
     apiClient.post<{ auth_url: string }>('/api/integrations/google/oauth/start'),
 
+  /**
+   * Redeem the one-time claim the OAuth callback handed back via redirect.
+   * This authenticated call is what binds the connection to the signed-in
+   * trainer's tenant.
+   */
+  googleOAuthClaim: (claim: string) =>
+    apiClient.post<{ connected: boolean; google_email: string | null }>(
+      '/api/integrations/google/oauth/claim',
+      { claim },
+    ),
+
   googleDisconnect: () =>
     apiClient.post<{ disconnected: boolean }>('/api/integrations/google/disconnect'),
 } as const;

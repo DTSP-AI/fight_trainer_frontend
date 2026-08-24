@@ -12,12 +12,10 @@ import { describeApiError } from '@/lib/api';
 import { integrationsApi, type IntegrationsStatus } from '@/lib/api/integrations';
 
 const GCAL_CALLBACK_TOASTS: Record<string, { ok: boolean; msg: string }> = {
-  connected: { ok: true, msg: 'Google Calendar connected' },
   denied: { ok: false, msg: 'Google sign-in was cancelled or denied' },
   state_invalid: { ok: false, msg: 'Connection link expired — try again' },
   exchange_failed: { ok: false, msg: 'Google token exchange failed — try again' },
   encrypt_failed: { ok: false, msg: 'Server encryption not configured (FERNET_KEY)' },
-  store_failed: { ok: false, msg: 'Could not save the connection — try again' },
   db_unavailable: { ok: false, msg: 'Database unavailable — try again shortly' },
 };
 
@@ -47,14 +45,30 @@ function IntegrationsContent() {
     refresh();
   }, [refresh]);
 
-  // Toast the OAuth callback outcome exactly once.
+  // Handle the OAuth callback outcome exactly once. `gcal=pending` carries a
+  // one-time encrypted claim that THIS authenticated session redeems — the
+  // redeem call is what binds the Google connection to the signed-in trainer.
   useEffect(() => {
     const outcome = searchParams.get('gcal');
     if (!outcome) return;
+    const claim = searchParams.get('claim');
+    window.history.replaceState(null, '', '/trainer/settings/integrations');
+
+    if (outcome === 'pending' && claim) {
+      integrationsApi
+        .googleOAuthClaim(claim)
+        .then(({ google_email: email }) => {
+          toast.success(
+            email ? `Google Calendar connected as ${email}` : 'Google Calendar connected',
+          );
+          refresh();
+        })
+        .catch((err) => toast.error(describeApiError(err)));
+      return;
+    }
     const t = GCAL_CALLBACK_TOASTS[outcome];
     if (t) (t.ok ? toast.success : toast.error)(t.msg);
-    window.history.replaceState(null, '', '/trainer/settings/integrations');
-  }, [searchParams]);
+  }, [searchParams, refresh]);
 
   async function onConnect() {
     setBusy(true);

@@ -10,6 +10,18 @@ import { pushApi, pushSupported, urlBase64ToUint8Array } from '@/lib/api/push';
 type PushState = 'unsupported' | 'disabled' | 'loading' | 'off' | 'on';
 
 /**
+ * serviceWorker.ready never rejects — if registration failed (blocked /sw.js,
+ * non-secure context, private mode) it hangs forever. Bound it so the UI can
+ * degrade to 'unsupported' instead of a permanent disabled button.
+ */
+async function swReady(timeoutMs = 5000): Promise<ServiceWorkerRegistration | null> {
+  return Promise.race([
+    navigator.serviceWorker.ready,
+    new Promise<null>((resolve) => setTimeout(() => resolve(null), timeoutMs)),
+  ]);
+}
+
+/**
  * Opt-in toggle for Web Push notifications. Works for trainer + student —
  * the backend keys the subscription off the caller's identity.
  *
@@ -33,8 +45,18 @@ export function PushToggle() {
           setState('disabled');
           return;
         }
-        const reg = await navigator.serviceWorker.ready;
+        const reg = await swReady();
+        if (!reg) {
+          if (!cancelled) setState('unsupported');
+          return;
+        }
         const sub = await reg.pushManager.getSubscription();
+        if (sub) {
+          // Re-register on every load: the backend row is keyed by endpoint
+          // and re-binding it to the CURRENT identity is what heals shared
+          // devices (trainer signs out, student signs in) and pruned rows.
+          await pushApi.subscribe(sub.toJSON(), navigator.userAgent).catch(() => undefined);
+        }
         if (!cancelled) setState(sub ? 'on' : 'off');
       } catch {
         if (!cancelled) setState('disabled');
@@ -57,7 +79,12 @@ export function PushToggle() {
       }
       const { public_key: publicKey } = await pushApi.publicKey();
       if (!publicKey) throw new Error('push not configured');
-      const reg = await navigator.serviceWorker.ready;
+      const reg = await swReady();
+      if (!reg) {
+        toast.error('Notifications unavailable — the app service worker did not load.');
+        setState('unsupported');
+        return;
+      }
       const sub = await reg.pushManager.subscribe({
         userVisibleOnly: true,
         applicationServerKey: urlBase64ToUint8Array(publicKey) as BufferSource,
@@ -75,8 +102,8 @@ export function PushToggle() {
   const disable = useCallback(async () => {
     setState('loading');
     try {
-      const reg = await navigator.serviceWorker.ready;
-      const sub = await reg.pushManager.getSubscription();
+      const reg = await swReady();
+      const sub = reg ? await reg.pushManager.getSubscription() : null;
       if (sub) {
         await pushApi.unsubscribe(sub.endpoint).catch(() => undefined);
         await sub.unsubscribe();
