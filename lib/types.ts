@@ -392,6 +392,10 @@ export interface InactivityAlert {
   id: string;
   tenant_id: string;
   student_id: string;
+  /** Resolved server-side from the students join — always present. */
+  student_name?: string;
+  days_inactive?: number;
+  last_session_date?: string | null;
   flagged_at: string;
   reason?: string | null;
   resolved_at?: string | null;

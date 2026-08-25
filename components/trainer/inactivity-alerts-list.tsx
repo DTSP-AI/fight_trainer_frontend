@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import Link from 'next/link';
 import { CheckCircle2, AlertTriangle } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
@@ -63,11 +64,17 @@ export function InactivityAlertsList() {
               aria-hidden
             />
             <div className="flex-1 min-w-[200px]">
-              <div className="text-sm font-medium">
-                Student {a.student_id.slice(0, 8)}…
-              </div>
+              <Link
+                href={`/trainer/students/${a.student_id}`}
+                className="text-sm font-medium hover:underline"
+              >
+                {a.student_name ?? `Student ${a.student_id.slice(0, 8)}…`}
+              </Link>
               <div className="text-xs text-muted-foreground">
                 Flagged {formatRelative(a.flagged_at)}
+                {typeof a.days_inactive === 'number'
+                  ? ` · ${a.days_inactive} days since last session`
+                  : ''}
                 {a.reason ? ` · ${a.reason}` : ''}
               </div>
             </div>
