@@ -13,6 +13,7 @@ import {
 import { AppHeader } from '@/components/common/app-header';
 import { RoleGate } from '@/components/common/role-gate';
 import { Sidebar, type SidebarItem } from '@/components/common/sidebar';
+import { IntakeReminder } from '@/components/student/intake-reminder';
 
 const NAV: SidebarItem[] = [
   {
@@ -68,7 +69,10 @@ export default function StudentLayout({
         <AppHeader homeHref="/student/feed" subtitle="Student" />
         <div className="flex flex-1">
           <Sidebar title="Student" items={NAV} />
-          <main className="flex-1 overflow-x-auto p-4 md:p-8">{children}</main>
+          <main className="flex-1 overflow-x-auto p-4 md:p-8">
+            <IntakeReminder />
+            {children}
+          </main>
         </div>
       </div>
     </RoleGate>
