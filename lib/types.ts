@@ -74,12 +74,6 @@ export interface TrainerSignupResponse {
   user_id: string;
 }
 
-export interface StudentInviteAcceptRequest {
-  invite_token: string;
-  full_name: string;
-  password: string;
-}
-
 // ---------- Domain rows ----------
 export interface Tenant {
   id: string;
