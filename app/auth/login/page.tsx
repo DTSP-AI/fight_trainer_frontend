@@ -13,6 +13,7 @@ import {
   getCurrentUser,
   getRoleFromUser,
   rolePathRoot,
+  signInWithGoogle,
   signInWithPassword,
 } from '@/lib/auth';
 import { BRAND } from '@/lib/brand';
@@ -45,6 +46,19 @@ function LoginForm() {
     const role = getRoleFromUser(user);
     const dest = next || rolePathRoot(role);
     router.replace(dest);
+  }
+
+  async function onGoogle() {
+    // Students sign in with Google. Route through /auth/callback so the OAuth
+    // code becomes a session, then land on /auth/student/accept which runs the
+    // idempotent claim: already-bound → straight to /student; first visit with
+    // a pending invite → binds, then /student.
+    const origin = window.location.origin;
+    const nextPath = encodeURIComponent('/auth/student/accept');
+    const res = await signInWithGoogle(
+      `${origin}/auth/callback?next=${nextPath}`,
+    );
+    if (!res.ok) toast.error(res.error ?? 'Could not start Google sign-in.');
   }
 
   return (
@@ -115,6 +129,27 @@ function LoginForm() {
             </Link>
           </p>
         </form>
+
+        <div className="my-6 flex items-center gap-3">
+          <div className="h-px flex-1 bg-border" />
+          <span className="text-xs uppercase tracking-wide text-muted-foreground">
+            or
+          </span>
+          <div className="h-px flex-1 bg-border" />
+        </div>
+
+        <Button
+          type="button"
+          variant="outline"
+          className="w-full"
+          size="lg"
+          onClick={onGoogle}
+        >
+          Continue with Google
+        </Button>
+        <p className="mt-2 text-center text-xs text-muted-foreground">
+          Students sign in with the Google account their coach invited.
+        </p>
       </CardContent>
     </Card>
   );
