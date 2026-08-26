@@ -45,18 +45,19 @@ function IntegrationsContent() {
     refresh();
   }, [refresh]);
 
-  // Handle the OAuth callback outcome exactly once. `gcal=pending` carries a
-  // one-time encrypted claim that THIS authenticated session redeems — the
-  // redeem call is what binds the Google connection to the signed-in trainer.
+  // Handle the OAuth callback outcome exactly once. On `gcal=pending` the
+  // backend already stored a server-side, single-use claim bound to this
+  // trainer; we complete the connection by calling claim WITH NO TOKEN — the
+  // backend finds it by our authenticated identity. Nothing redeemable is in
+  // the URL.
   useEffect(() => {
     const outcome = searchParams.get('gcal');
     if (!outcome) return;
-    const claim = searchParams.get('claim');
     window.history.replaceState(null, '', '/trainer/settings/integrations');
 
-    if (outcome === 'pending' && claim) {
+    if (outcome === 'pending') {
       integrationsApi
-        .googleOAuthClaim(claim)
+        .googleOAuthClaim()
         .then(({ google_email: email }) => {
           toast.success(
             email ? `Google Calendar connected as ${email}` : 'Google Calendar connected',

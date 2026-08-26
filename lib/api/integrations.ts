@@ -21,14 +21,13 @@ export const integrationsApi = {
     apiClient.post<{ auth_url: string }>('/api/integrations/google/oauth/start'),
 
   /**
-   * Redeem the one-time claim the OAuth callback handed back via redirect.
-   * This authenticated call is what binds the connection to the signed-in
-   * trainer's tenant.
+   * Complete the connection: atomically consume THIS trainer's pending
+   * server-side claim (bound to their tenant+user at /start). No token is
+   * carried from the browser — the backend finds the claim by identity.
    */
-  googleOAuthClaim: (claim: string) =>
+  googleOAuthClaim: () =>
     apiClient.post<{ connected: boolean; google_email: string | null }>(
       '/api/integrations/google/oauth/claim',
-      { claim },
     ),
 
   googleDisconnect: () =>
