@@ -44,6 +44,8 @@ function AcceptInvite() {
       setTimeout(() => router.replace('/student'), 900);
     } catch (err) {
       bound.current = false;
+      // Log so the reason survives even if the UI re-renders fast.
+      console.error('[student/accept] claim failed:', err);
       setPhase('error');
       setMessage(describeApiError(err));
     }
