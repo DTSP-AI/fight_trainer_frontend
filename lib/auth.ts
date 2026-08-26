@@ -74,6 +74,23 @@ export async function signOut(): Promise<void> {
 }
 
 /**
+ * Start Supabase Google OAuth. Supabase creates + verifies the identity, then
+ * redirects to `redirectTo` (route it through /auth/callback so the PKCE code
+ * is exchanged into a cookie session). No password, no magic link.
+ */
+export async function signInWithGoogle(
+  redirectTo: string,
+): Promise<{ ok: boolean; error?: string }> {
+  const sb = getSupabaseBrowser();
+  const { error } = await sb.auth.signInWithOAuth({
+    provider: 'google',
+    options: { redirectTo },
+  });
+  if (error) return { ok: false, error: error.message };
+  return { ok: true };
+}
+
+/**
  * Send a password-reset email via Supabase Auth. The link lands the user on
  * `redirectTo` with a recovery session, where they set a new password.
  */
