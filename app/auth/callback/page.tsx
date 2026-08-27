@@ -5,14 +5,14 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { getSupabaseBrowser } from '@/lib/supabase/client';
 
 /**
- * OAuth/magic-link callback handler.
+ * Supabase OAuth callback handler (Google sign-in).
  *
- * Supports both Supabase auth flows:
- *   - PKCE (server flow): redirect lands with `?code=...` query param.
+ * Handles both response shapes Supabase can return:
+ *   - PKCE (the flow we use): redirect lands with `?code=...`.
  *     Client calls `exchangeCodeForSession(code)` → sets session cookies.
- *   - Implicit (hash flow): redirect lands with `#access_token=...&refresh_token=...`
- *     fragment. `createBrowserClient` from @supabase/ssr auto-detects the
- *     fragment and calls setSession() under the hood. We wait briefly for it.
+ *   - Implicit (hash) fallback: `#access_token=...&refresh_token=...` fragment,
+ *     which `createBrowserClient` auto-detects. Kept only as a defensive
+ *     fallback — no magic-link flow uses this anymore.
  *
  * Either way, after the session is in cookies, we navigate to `?next=`.
  *
