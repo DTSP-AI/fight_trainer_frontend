@@ -23,6 +23,14 @@ function LoginForm() {
   const params = useSearchParams();
   const next = params.get('next');
   const reason = params.get('reason');
+  const detail = params.get('detail');
+  // Errors already handled with a friendly message above; everything else
+  // (OAuth handshake / callback failures) gets surfaced verbatim so it can't
+  // vanish in a flash — this is where a Google error_description lands.
+  const rawError =
+    reason && reason !== 'role_mismatch' && reason !== 'supabase_not_configured'
+      ? reason
+      : null;
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -76,6 +84,16 @@ function LoginForm() {
           <p className="mb-4 rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive">
             Auth is not configured. Contact your administrator.
           </p>
+        ) : null}
+        {rawError ? (
+          <div className="mb-4 rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive">
+            <p className="font-medium">Sign-in failed: {rawError}</p>
+            {detail ? (
+              <p className="mt-1 break-words font-mono text-xs opacity-90">
+                {detail}
+              </p>
+            ) : null}
+          </div>
         ) : null}
 
         <form className="space-y-4" onSubmit={onPasswordSubmit}>
