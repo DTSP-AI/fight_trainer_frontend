@@ -84,7 +84,14 @@ export async function signInWithGoogle(
   const sb = getSupabaseBrowser();
   const { error } = await sb.auth.signInWithOAuth({
     provider: 'google',
-    options: { redirectTo },
+    options: {
+      redirectTo,
+      // Always show Google's account chooser. Without this Google silently
+      // reuses whatever account is already signed in — which sends a coach's
+      // account into the student claim (→ 409) when a different account was
+      // intended. Let the user pick the exact invited address every time.
+      queryParams: { prompt: 'select_account' },
+    },
   });
   if (error) return { ok: false, error: error.message };
   return { ok: true };
