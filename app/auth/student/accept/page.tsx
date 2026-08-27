@@ -7,7 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { authApi } from '@/lib/api/auth';
 import { describeApiError } from '@/lib/api';
-import { getCurrentSession, signInWithGoogle } from '@/lib/auth';
+import { getCurrentSession, signInWithGoogle, signOut } from '@/lib/auth';
 import { getSupabaseBrowser } from '@/lib/supabase/client';
 import { BRAND } from '@/lib/brand';
 
@@ -44,6 +44,8 @@ function AcceptInvite() {
       setTimeout(() => router.replace('/student'), 900);
     } catch (err) {
       bound.current = false;
+      // Log so the reason survives even if the UI re-renders fast.
+      console.error('[student/accept] claim failed:', err);
       setPhase('error');
       setMessage(describeApiError(err));
     }
@@ -120,15 +122,23 @@ function AcceptInvite() {
               <AlertCircle className="mt-0.5 h-5 w-5 shrink-0" />
               <span>{message}</span>
             </div>
+            <p className="text-xs text-muted-foreground">
+              If you signed in with the wrong Google account, sign out and try
+              again with the exact email your coach invited.
+            </p>
             <Button
               variant="outline"
               className="w-full"
-              onClick={() => {
+              onClick={async () => {
+                // Signed in with the wrong account → clear the session so the
+                // next attempt uses a different Google account (a plain retry
+                // would re-run the claim with the same identity and 404 again).
+                await signOut();
                 setMessage('');
                 setPhase('need_auth');
               }}
             >
-              Try again
+              Sign out &amp; use a different account
             </Button>
           </div>
         )}
