@@ -54,7 +54,7 @@ export default function TrainerLayout({
     <RoleGate role="trainer">
       <div className="flex min-h-screen flex-col bg-background">
         <AppHeader homeHref="/trainer" subtitle="Coach" />
-        <div className="flex flex-1">
+        <div className="flex flex-1 flex-col md:flex-row">
           <Sidebar title="Coach" items={NAV} />
           <main className="flex-1 overflow-x-auto p-4 md:p-8">{children}</main>
         </div>

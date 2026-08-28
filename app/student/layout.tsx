@@ -67,7 +67,7 @@ export default function StudentLayout({
     <RoleGate role="student">
       <div className="flex min-h-screen flex-col bg-background">
         <AppHeader homeHref="/student/feed" subtitle="Student" />
-        <div className="flex flex-1">
+        <div className="flex flex-1 flex-col md:flex-row">
           <Sidebar title="Student" items={NAV} />
           <main className="flex-1 overflow-x-auto p-4 md:p-8">
             <IntakeReminder />

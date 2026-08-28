@@ -20,7 +20,7 @@ export default function AdminLayout({
     <RoleGate role="dtsp_admin">
       <div className="flex min-h-screen flex-col bg-background">
         <AppHeader homeHref="/dtsp-admin" subtitle="DTSP Admin" />
-        <div className="flex flex-1">
+        <div className="flex flex-1 flex-col md:flex-row">
           <Sidebar title="DTSP Admin" items={NAV} />
           <main className="flex-1 overflow-x-auto p-4 md:p-8">{children}</main>
         </div>
