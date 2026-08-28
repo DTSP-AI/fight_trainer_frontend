@@ -1,15 +1,8 @@
 'use client';
 
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { ChevronDown } from 'lucide-react';
-import { Button } from '@/components/ui/button';
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu';
 import { cn } from '@/lib/utils';
 
 export interface SidebarItem {
@@ -27,50 +20,85 @@ interface SidebarProps {
  * Section navigation for the role surfaces (Coach / Student / DTSP Admin).
  *
  * - md and up: the classic left sidebar.
- * - Below md: the sidebar used to be `hidden` with NO replacement — phones had
- *   no way to navigate between sections at all. Now the section list collapses
- *   into a full-width dropdown bar under the header showing the current
- *   section; tapping it opens the full list.
+ * - Below md: an animated hamburger bar under the header. The three lines
+ *   morph into an X on open, and the section list slides down beneath it.
+ *   (The sidebar used to be `hidden` on mobile with NO replacement — phones
+ *   had no way to navigate between sections at all.)
  */
 export function Sidebar({ items, title }: SidebarProps) {
   const pathname = usePathname();
+  const [open, setOpen] = useState(false);
+
   const isActive = (href: string) =>
     pathname === href || pathname.startsWith(`${href}/`);
   const current = items.find((item) => isActive(item.href));
 
+  // Close the panel whenever navigation happens.
+  useEffect(() => {
+    setOpen(false);
+  }, [pathname]);
+
   return (
     <>
-      {/* Mobile: current-section dropdown (below md) */}
-      <div className="border-b border-border bg-card px-4 py-2 md:hidden">
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button
-              variant="outline"
-              className="w-full justify-between"
-              aria-label={`${title} navigation`}
-            >
-              <span className="flex items-center gap-2">
-                <span aria-hidden className="text-foreground/80">
-                  {current?.icon}
-                </span>
-                {current?.label ?? title}
-              </span>
-              <ChevronDown className="h-4 w-4 opacity-60" />
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent
-            align="start"
-            className="w-[var(--radix-dropdown-menu-trigger-width)] min-w-56"
-          >
-            {items.map((item) => (
-              <DropdownMenuItem key={item.href} asChild>
+      {/* Mobile: animated hamburger + slide-down nav (below md) */}
+      <div className="border-b border-border bg-card md:hidden">
+        <button
+          type="button"
+          onClick={() => setOpen((v) => !v)}
+          aria-expanded={open}
+          aria-controls="mobile-section-nav"
+          aria-label={`${title} navigation`}
+          className="flex w-full items-center gap-3 px-4 py-3 text-sm text-foreground"
+        >
+          {/* Animated hamburger: three bars morph into an X */}
+          <span aria-hidden className="relative block h-4 w-5">
+            <span
+              className={cn(
+                'absolute left-0 top-0 block h-0.5 w-5 rounded-full bg-foreground transition-all duration-300',
+                open && 'top-[7px] rotate-45',
+              )}
+            />
+            <span
+              className={cn(
+                'absolute left-0 top-[7px] block h-0.5 w-5 rounded-full bg-foreground transition-all duration-300',
+                open && 'opacity-0',
+              )}
+            />
+            <span
+              className={cn(
+                'absolute bottom-0 left-0 block h-0.5 w-5 rounded-full bg-foreground transition-all duration-300',
+                open && 'bottom-[7px] -rotate-45',
+              )}
+            />
+          </span>
+          <span className="flex items-center gap-2 font-medium">
+            <span aria-hidden className="text-foreground/80">
+              {current?.icon}
+            </span>
+            {current?.label ?? title}
+          </span>
+        </button>
+
+        {/* Slide-down panel */}
+        <nav
+          id="mobile-section-nav"
+          className={cn(
+            'grid overflow-hidden transition-all duration-300 ease-in-out',
+            open ? 'grid-rows-[1fr] opacity-100' : 'grid-rows-[0fr] opacity-0',
+          )}
+        >
+          <div className="min-h-0 overflow-hidden">
+            <div className="space-y-1 border-t border-border p-3">
+              {items.map((item) => (
                 <Link
+                  key={item.href}
                   href={item.href}
+                  onClick={() => setOpen(false)}
                   className={cn(
-                    'flex w-full items-center gap-3',
+                    'flex items-center gap-3 rounded-md px-3 py-2 text-sm transition-colors',
                     isActive(item.href)
                       ? 'bg-secondary text-secondary-foreground'
-                      : 'text-muted-foreground',
+                      : 'text-muted-foreground hover:bg-secondary/60 hover:text-foreground',
                   )}
                 >
                   <span aria-hidden className="text-foreground/80">
@@ -78,10 +106,10 @@ export function Sidebar({ items, title }: SidebarProps) {
                   </span>
                   {item.label}
                 </Link>
-              </DropdownMenuItem>
-            ))}
-          </DropdownMenuContent>
-        </DropdownMenu>
+              ))}
+            </div>
+          </div>
+        </nav>
       </div>
 
       {/* Desktop: classic left sidebar (unchanged) */}
