@@ -310,7 +310,7 @@ function InviteSentPanel({
       ) : delivery?.status === 'skipped' ? (
         <p className="rounded-md border border-amber-500/40 bg-amber-500/10 p-3 text-sm">
           <strong>Email service not configured on the backend.</strong> Set{' '}
-          <span className="font-mono">RESEND_API_KEY</span> on Render and a
+          <span className="font-mono">RESEND_API_KEY</span> on Railway and a
           verified <span className="font-mono">RESEND_FROM_ADDRESS</span> to
           enable automatic delivery. Until then, copy the link below and send
           it via your own email or text.
