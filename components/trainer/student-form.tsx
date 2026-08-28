@@ -331,8 +331,8 @@ function InviteSentPanel({
           </Button>
         </div>
         <p className="text-xs text-muted-foreground">
-          Anyone with this link can claim the student account, so don't post
-          it publicly.
+          Safe to share — the link contains no secret. Claiming requires
+          signing in with Google as the exact email you invited.
         </p>
       </div>
 
