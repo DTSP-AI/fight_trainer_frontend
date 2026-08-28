@@ -181,6 +181,13 @@ export function KnowledgeGraph3D({
   const [hovered, setHovered] = useState<KGNode | null>(null);
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [size, setSize] = useState({ width: 800, height });
+  // The legend obstructs the canvas on phones — start it collapsed below md.
+  // A "Types" chip re-opens it; the header row collapses it again.
+  const [legendOpen, setLegendOpen] = useState<boolean>(() =>
+    typeof window === 'undefined'
+      ? true
+      : window.matchMedia('(min-width: 768px)').matches,
+  );
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [refreshNonce, setRefreshNonce] = useState(0);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -721,12 +728,29 @@ export function KnowledgeGraph3D({
         )}
         style={!isFullscreen ? { background: backgroundColor } : undefined}
       >
-        {/* Legend — top-right, MW pattern. Click a row to toggle visibility. */}
-        {showLegend && Object.keys(typeCounts).length > 0 && (
+        {/* Legend — top-right. Collapses to a "Types" chip (default on mobile,
+            where the full panel obstructs the canvas). */}
+        {showLegend && Object.keys(typeCounts).length > 0 && !legendOpen && (
+          <button
+            type="button"
+            onClick={() => setLegendOpen(true)}
+            aria-expanded={false}
+            className="absolute right-3 top-16 z-10 rounded-lg border border-white/10 bg-slate-950/80 px-3 py-1.5 text-xs font-medium text-slate-200 backdrop-blur-sm transition-colors hover:bg-slate-900 hover:text-slate-50"
+          >
+            Types
+          </button>
+        )}
+        {showLegend && Object.keys(typeCounts).length > 0 && legendOpen && (
           <div className="absolute right-3 top-16 z-10 max-h-[70%] overflow-y-auto rounded-lg border border-white/10 bg-slate-950/90 p-2.5 backdrop-blur-sm">
-            <div className="mb-1.5 text-xs font-medium text-slate-200">
+            <button
+              type="button"
+              onClick={() => setLegendOpen(false)}
+              aria-expanded
+              className="mb-1.5 flex w-full items-center justify-between gap-6 text-xs font-medium text-slate-200 transition-colors hover:text-slate-50"
+            >
               Node Types
-            </div>
+              <X className="h-3 w-3 opacity-60" />
+            </button>
             <div className="space-y-1">
               {Object.keys(typeCounts)
                 .sort()
