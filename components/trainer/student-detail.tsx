@@ -13,6 +13,7 @@ import { EmptyState } from '@/components/common/empty-state';
 import { studentsApi } from '@/lib/api/students';
 import { describeApiError } from '@/lib/api';
 import { formatDate, formatRelative } from '@/lib/utils';
+import { canResendInvite, useResendInvite } from './use-resend-invite';
 import type { StudentDetailResponse } from '@/lib/types';
 
 interface StudentDetailProps {
@@ -23,8 +24,9 @@ export function StudentDetail({ studentId }: StudentDetailProps) {
   const router = useRouter();
   const [data, setData] = useState<StudentDetailResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [resending, setResending] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const { resendInvite, resendingId } = useResendInvite();
+  const resending = resendingId === studentId;
 
   async function deleteStudent() {
     const name = data?.student.full_name ?? 'this student';
@@ -49,30 +51,6 @@ export function StudentDetail({ studentId }: StudentDetailProps) {
       toast.error(describeApiError(err));
     } finally {
       setDeleting(false);
-    }
-  }
-
-  async function resendInvite() {
-    setResending(true);
-    try {
-      const res = await studentsApi.resendInvite(studentId);
-      if (res.delivery.status === 'sent') {
-        toast.success('Invite resent.');
-      } else if (res.delivery.status === 'skipped') {
-        await navigator.clipboard
-          .writeText(res.invite_link)
-          .catch(() => undefined);
-        toast(
-          'Email service not configured — invite link copied to clipboard.',
-          { duration: 6000 },
-        );
-      } else {
-        toast.error(`Resend failed: ${res.delivery.error ?? 'unknown'}`);
-      }
-    } catch (err) {
-      toast.error(describeApiError(err));
-    } finally {
-      setResending(false);
     }
   }
 
@@ -146,12 +124,10 @@ export function StudentDetail({ studentId }: StudentDetailProps) {
               Billing &amp; invoices
             </Link>
           </Button>
-          {student.invite_email &&
-          (student.invite_status === 'pending' ||
-            student.invite_status === 'sent') ? (
+          {canResendInvite(student) ? (
             <Button
               variant="outline"
-              onClick={resendInvite}
+              onClick={() => resendInvite(studentId)}
               disabled={resending}
             >
               <Mail className="h-4 w-4" />
