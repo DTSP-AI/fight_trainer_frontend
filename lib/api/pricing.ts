@@ -37,3 +37,38 @@ export async function getPublicPricingPackages(): Promise<
     return [];
   }
 }
+
+/**
+ * Non-secret payment handles for the brand tenant, served by the same tenant
+ * settings row the coach edits at /trainer/settings/payments. These used to be
+ * hardcoded constants in lib/payments.ts, which meant editing that page changed
+ * nothing public.
+ */
+export interface PublicPaymentMethods {
+  venmo_handle: string | null;
+  zelle_phone: string | null;
+  zelle_email: string | null;
+  zelle_display_name: string | null;
+}
+
+const NO_PAYMENT_METHODS: PublicPaymentMethods = {
+  venmo_handle: null,
+  zelle_phone: null,
+  zelle_email: null,
+  zelle_display_name: null,
+};
+
+export async function getPublicPaymentMethods(): Promise<PublicPaymentMethods> {
+  try {
+    const res = await fetch(`${API_BASE}/api/pricing/payment-methods`, {
+      cache: 'no-store',
+    });
+    if (!res.ok) return NO_PAYMENT_METHODS;
+    const json = (await res.json()) as { data?: PublicPaymentMethods };
+    return json.data ?? NO_PAYMENT_METHODS;
+  } catch {
+    // Same contract as the packages fetch: an unreachable backend renders a
+    // degraded page, never a crash.
+    return NO_PAYMENT_METHODS;
+  }
+}

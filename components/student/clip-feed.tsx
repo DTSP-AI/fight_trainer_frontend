@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Film } from 'lucide-react';
 import { ClipCard } from '@/components/student/clip-card';
+import { NoticeCard } from '@/components/student/notice-card';
 import { LoadingState } from '@/components/common/loading-state';
 import { EmptyState } from '@/components/common/empty-state';
 import { studentPortalApi } from '@/lib/api/student-portal';
@@ -87,9 +88,15 @@ export function ClipFeed() {
 
   return (
     <div className="space-y-6">
-      {items.map((item) => (
-        <ClipCard key={item.delivery_id} item={item} />
-      ))}
+      {items.map((item) =>
+        item.type === 'notice' ? (
+          // A session with no matching clip. ClipCard would dereference a null
+          // fight, and there is nothing to play, rate, or track anyway.
+          <NoticeCard key={item.delivery_id} item={item} />
+        ) : (
+          <ClipCard key={item.delivery_id} item={item} />
+        ),
+      )}
       {hasMore ? (
         <div ref={sentinelRef} className="h-10">
           {loading ? <LoadingState label="Loading more…" /> : null}

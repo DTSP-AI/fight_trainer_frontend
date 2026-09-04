@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
-import { ArrowLeft, Copy, Send, ExternalLink, Plus } from 'lucide-react';
+import { ArrowLeft, Copy, Send, ExternalLink, Plus, Wallet } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -22,6 +22,11 @@ import {
 import { studentsApi } from '@/lib/api/students';
 import { describeApiError } from '@/lib/api';
 import type { Student } from '@/lib/types';
+
+// Stripe is deliberately absent: those payments are recorded by webhook, and
+// the backend rejects method='stripe' on this route.
+const OFF_STRIPE_METHODS = ['venmo', 'zelle', 'cash', 'other'] as const;
+type OffStripeMethod = (typeof OFF_STRIPE_METHODS)[number];
 
 function fmtCents(cents: number): string {
   return new Intl.NumberFormat('en-US', {
@@ -605,7 +610,14 @@ function InvoiceRowItem({
   onRefresh: () => void;
 }) {
   const [sending, setSending] = useState(false);
+  const [recording, setRecording] = useState(false);
+  const [showRecord, setShowRecord] = useState(false);
   const due = Math.max(inv.amount_cents - inv.amount_paid_cents, 0);
+  // Default to the outstanding balance — settling in full is the common case.
+  const [payAmount, setPayAmount] = useState((due / 100).toFixed(2));
+  const [payMethod, setPayMethod] = useState<OffStripeMethod>('venmo');
+  const [payReference, setPayReference] = useState('');
+  const closed = inv.status === 'paid' || inv.status === 'cancelled' || due <= 0;
   const publicUrl =
     inv.public_url ??
     (typeof window !== 'undefined'
@@ -639,6 +651,41 @@ function InvoiceRowItem({
       toast.success('Public invoice link copied');
     } catch {
       toast.error('Could not copy');
+    }
+  }
+
+  async function recordPayment(e: React.FormEvent) {
+    e.preventDefault();
+    const cents = Math.round(Number(payAmount) * 100);
+    if (!Number.isFinite(cents) || cents <= 0) {
+      toast.error('Enter an amount');
+      return;
+    }
+    if (cents > due) {
+      // Mirrors the backend OVERPAYMENT guard so the coach gets the answer
+      // without a round trip.
+      toast.error(`That is more than the ${fmtCents(due)} outstanding`);
+      return;
+    }
+    setRecording(true);
+    try {
+      const res = await billingApi.recordInvoicePayment(inv.id, {
+        amount_cents: cents,
+        method: payMethod,
+        external_reference: payReference.trim() || undefined,
+      });
+      toast.success(
+        res.balance_after_cents > 0
+          ? `Recorded — ${fmtCents(res.balance_after_cents)} still due`
+          : 'Invoice settled',
+      );
+      setShowRecord(false);
+      setPayReference('');
+      onRefresh();
+    } catch (err) {
+      toast.error(describeApiError(err));
+    } finally {
+      setRecording(false);
     }
   }
 
@@ -682,7 +729,89 @@ function InvoiceRowItem({
             Open
           </a>
         </Button>
+        {closed ? null : (
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => setShowRecord((v) => !v)}
+          >
+            <Wallet className="h-4 w-4" />
+            Record payment
+          </Button>
+        )}
       </div>
+      {showRecord ? (
+        <form
+          onSubmit={recordPayment}
+          className="mt-3 space-y-3 rounded-md border border-border bg-background/60 p-3"
+        >
+          <p className="text-xs text-muted-foreground">
+            Money you received outside Stripe. Stripe payments record themselves.
+          </p>
+          <div className="flex flex-wrap gap-3">
+            <div className="space-y-1">
+              <Label htmlFor={`pay-amount-${inv.id}`} className="text-xs">
+                Amount
+              </Label>
+              <Input
+                id={`pay-amount-${inv.id}`}
+                type="number"
+                step="0.01"
+                min={0.01}
+                max={due / 100}
+                value={payAmount}
+                onChange={(e) => setPayAmount(e.target.value)}
+                className="w-32"
+                required
+              />
+            </div>
+            <div className="space-y-1">
+              <Label htmlFor={`pay-method-${inv.id}`} className="text-xs">
+                Method
+              </Label>
+              <select
+                id={`pay-method-${inv.id}`}
+                className="h-10 rounded-md border border-input bg-background px-3 text-sm"
+                value={payMethod}
+                onChange={(e) =>
+                  setPayMethod(e.target.value as OffStripeMethod)
+                }
+              >
+                {OFF_STRIPE_METHODS.map((m) => (
+                  <option key={m} value={m}>
+                    {m}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="space-y-1">
+              <Label htmlFor={`pay-ref-${inv.id}`} className="text-xs">
+                Reference (optional)
+              </Label>
+              <Input
+                id={`pay-ref-${inv.id}`}
+                placeholder="confirmation #"
+                value={payReference}
+                onChange={(e) => setPayReference(e.target.value)}
+                className="w-44"
+              />
+            </div>
+          </div>
+          <div className="flex gap-2">
+            <Button type="submit" size="sm" disabled={recording}>
+              {recording ? 'Recording…' : 'Record payment'}
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              variant="ghost"
+              onClick={() => setShowRecord(false)}
+            >
+              Cancel
+            </Button>
+          </div>
+        </form>
+      ) : null}
     </div>
   );
 }

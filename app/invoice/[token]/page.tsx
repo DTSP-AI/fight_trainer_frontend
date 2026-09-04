@@ -1,6 +1,7 @@
 'use client';
 
 import { Suspense, useEffect, useState } from 'react';
+import { BRAND } from '@/lib/brand';
 import { useParams, useSearchParams } from 'next/navigation';
 import { Check, Copy, CreditCard, ExternalLink } from 'lucide-react';
 import { toast } from 'sonner';
@@ -131,7 +132,7 @@ function PublicInvoiceContent() {
         {/* Header */}
         <div className="text-center">
           <p className="text-xs uppercase tracking-wider text-muted-foreground">
-            {data.trainer.tenant_name ?? 'Fight Trainer'}
+            {data.trainer.tenant_name ?? BRAND.name}
           </p>
           <h1 className="mt-2 text-3xl font-semibold tracking-tight">
             {data.student.name ? `Hi ${data.student.name.split(' ')[0]},` : 'Hi,'}
