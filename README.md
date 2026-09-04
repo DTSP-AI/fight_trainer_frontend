@@ -9,16 +9,21 @@ here disagrees with the code, the code is right and this file is a bug.
 ## Run
 
 ```bash
-npm install
+pnpm install                         # pnpm, not npm — pnpm-lock.yaml is the lockfile
 cp .env.local.example .env.local     # fill NEXT_PUBLIC_API_URL + Supabase keys
-npm run dev                          # http://localhost:3000
+pnpm dev                             # http://localhost:3000
 
-npm run typecheck                    # tsc --noEmit — THE gate
-npm run build                        # production build
+pnpm typecheck                       # tsc --noEmit — THE release gate
+pnpm build                           # production build
+pnpm lint                            # ESLint 9 flat config
 ```
 
-`npm run lint` currently fails: ESLint 9 needs `eslint.config.js` and the repo
-still has none, so `tsc --noEmit` plus `next build` are the real static gates.
+`pnpm typecheck` and `pnpm build` are the gates a change must pass.
+
+`pnpm lint` runs but is **not yet clean**: it reports 33 pre-existing errors —
+mostly `react/no-unescaped-entities` and 17 `react-hooks/set-state-in-effect`.
+Those predate the config being added and are tracked as post-ship work. Do not
+add `eslint-disable` comments to make the number smaller.
 
 ## Routes
 
@@ -79,6 +84,16 @@ page is the single source of truth (`lib/api/pricing.ts`).
 
 ## Testing
 
-There is **no e2e or unit harness installed** in this repo — no Playwright, no
-Jest, no Vitest. Verification is `tsc --noEmit`, `next build`, and manual
-browser smoke. Adding a harness is post-ship work.
+There is **no unit-test harness** in this repo — no Jest, no Vitest.
+
+Playwright specs ARE authored (`e2e/`, `playwright.config.ts`) but the harness
+is **not installed**: `@playwright/test` is not a dependency, which is why
+`playwright.config.ts` carries a `@ts-nocheck`. To activate:
+
+```bash
+pnpm add -D @playwright/test && pnpm exec playwright install chromium
+pnpm exec playwright test
+```
+
+Until then, verification is `pnpm typecheck`, `pnpm build`, and manual browser
+smoke.
