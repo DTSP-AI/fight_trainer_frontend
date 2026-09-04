@@ -10,10 +10,10 @@ import { studentPortalApi } from '@/lib/api/student-portal';
 import { describeApiError } from '@/lib/api';
 import { buildYouTubeEmbedUrl, clipDurationSeconds } from '@/lib/youtube';
 import { cn, formatRelative, formatSecondsToClock } from '@/lib/utils';
-import type { FeedItem, RatingRequest } from '@/lib/types';
+import type { FeedClipItem, RatingRequest } from '@/lib/types';
 
 interface ClipCardProps {
-  item: FeedItem;
+  item: FeedClipItem;
 }
 
 /**

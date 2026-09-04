@@ -196,10 +196,19 @@ export interface SessionReprocessRequest {
   force_clip_refresh?: boolean;
 }
 
+export interface SessionNotice {
+  id: string;
+  created_at: string | null;
+  kind: string | null;
+  message: string | null;
+}
+
 export interface SessionDetailResponse {
   session: Session;
   session_techniques: SessionTechnique[];
   clip_deliveries: ClipDelivery[];
+  /** Why no clip went out. Absent on a backend running ahead of the migration. */
+  session_notices?: SessionNotice[];
 }
 
 // ---------- Clips ----------
@@ -232,7 +241,9 @@ export interface FeedItemTechnique {
   display_name: string | null;
 }
 
-export interface FeedItem {
+/** A delivered clip — always points at real footage. */
+export interface FeedClipItem {
+  type?: 'clip';
   delivery_id: string;
   delivered_at: string | null;
   fight: FeedItemFight;
@@ -242,6 +253,26 @@ export interface FeedItem {
   delivery_message: string | null;
   session_reference: string | null;
 }
+
+/**
+ * A session that produced no clip. Separate from a delivery on purpose:
+ * clip_deliveries rows must always reference a real fight + technique, so the
+ * "we logged it but had no match" message is its own domain object.
+ */
+export interface FeedNoticeItem {
+  type: 'notice';
+  delivery_id: string;
+  delivered_at: string | null;
+  fight: null;
+  technique: null;
+  timestamp_start_seconds: null;
+  timestamp_end_seconds: null;
+  delivery_message: string | null;
+  notice_kind: string | null;
+  session_reference: string | null;
+}
+
+export type FeedItem = FeedClipItem | FeedNoticeItem;
 
 export interface FeedResponse {
   items: FeedItem[];

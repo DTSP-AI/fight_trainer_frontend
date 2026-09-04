@@ -64,6 +64,7 @@ export function SessionDetail({ sessionId }: SessionDetailProps) {
   if (!data) return <LoadingState label="Loading session…" />;
 
   const { session, session_techniques, clip_deliveries } = data;
+  const sessionNotices = data.session_notices ?? [];
 
   return (
     <div className="space-y-6">
@@ -180,7 +181,23 @@ export function SessionDetail({ sessionId }: SessionDetailProps) {
           <CardTitle className="text-base">Clip delivered</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4 p-5 pt-0">
-          {clip_deliveries.length === 0 ? (
+          {clip_deliveries.length === 0 && sessionNotices.length > 0 ? (
+            // The pipeline finished and explained itself — saying "still
+            // running" here is what taught coaches to distrust this panel.
+            sessionNotices.map((n) => (
+              <div
+                key={n.id}
+                className="rounded-md border border-dashed border-border bg-muted/30 p-4 text-sm"
+              >
+                <p>{n.message}</p>
+                {n.kind ? (
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    Reason: {n.kind.replace(/_/g, ' ')}
+                  </p>
+                ) : null}
+              </div>
+            ))
+          ) : clip_deliveries.length === 0 ? (
             <EmptyState
               title="Pipeline still running"
               description="Clips usually land within ~90 seconds. Refresh to check."
