@@ -6,6 +6,7 @@ import { Footer } from '@/components/marketing/footer';
 import { PaymentMethods } from '@/components/marketing/payment-methods';
 import { BRAND } from '@/lib/brand';
 import {
+  getPublicPaymentMethods,
   getPublicPricingPackages,
   type PublicPricingPackage,
 } from '@/lib/api/pricing';
@@ -75,8 +76,15 @@ function groupByDuration(
     }));
 }
 
-function PackageCard({ pkg }: { pkg: PublicPricingPackage }) {
+function PackageCard({
+  pkg,
+  venmoHandle,
+}: {
+  pkg: PublicPricingPackage;
+  venmoHandle: string | null;
+}) {
   const perSession = packagePerSessionLabel(pkg);
+  const href = getCheckoutHref(pkg, venmoHandle);
   return (
     <div
       className={`relative flex flex-col rounded-lg border bg-card p-6 ${
@@ -116,22 +124,32 @@ function PackageCard({ pkg }: { pkg: PublicPricingPackage }) {
       {perSession && (
         <p className="mt-2 text-sm text-muted-foreground">{perSession}</p>
       )}
-      <Button
-        asChild
-        size="lg"
-        variant={pkg.is_popular ? 'default' : 'outline'}
-        className="mt-8"
-      >
-        <a href={getCheckoutHref(pkg)} rel="noopener noreferrer">
-          {getCheckoutLabel(pkg)}
-        </a>
-      </Button>
+      {href ? (
+        <Button
+          asChild
+          size="lg"
+          variant={pkg.is_popular ? 'default' : 'outline'}
+          className="mt-8"
+        >
+          <a href={href} rel="noopener noreferrer">
+            {getCheckoutLabel(pkg, venmoHandle)}
+          </a>
+        </Button>
+      ) : (
+        // No payment handle configured: show the price, never a dead pay link.
+        <p className="mt-8 text-sm text-muted-foreground">
+          Contact your coach to arrange payment.
+        </p>
+      )}
     </div>
   );
 }
 
 export default async function PricingPage() {
-  const packages = await getPublicPricingPackages();
+  const [packages, paymentMethods] = await Promise.all([
+    getPublicPricingPackages(),
+    getPublicPaymentMethods(),
+  ]);
   const groups = groupByDuration(packages);
 
   return (
@@ -171,7 +189,11 @@ export default async function PricingPage() {
               </div>
               <div className="mx-auto mt-12 grid max-w-6xl gap-6 md:grid-cols-2 lg:grid-cols-4">
                 {group.packages.map((pkg) => (
-                  <PackageCard key={pkg.id} pkg={pkg} />
+                  <PackageCard
+                    key={pkg.id}
+                    pkg={pkg}
+                    venmoHandle={paymentMethods.venmo_handle}
+                  />
                 ))}
               </div>
             </section>
@@ -179,7 +201,7 @@ export default async function PricingPage() {
         )}
 
         {/* Payment methods */}
-        <PaymentMethods />
+        <PaymentMethods methods={paymentMethods} />
 
         {/* What's Included + Who It's For */}
         <section className="mt-24 grid gap-12 rounded-lg border border-border bg-card p-8 md:grid-cols-2 md:p-12">

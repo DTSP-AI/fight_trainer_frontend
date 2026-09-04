@@ -18,9 +18,10 @@ export type PaymentProvider = 'venmo' | 'stripe';
 export const PAYMENTS_PROVIDER: PaymentProvider =
   (process.env.NEXT_PUBLIC_PAYMENTS_PROVIDER as PaymentProvider) || 'venmo';
 
-export const VENMO_HANDLE = 'dtspbjj';
-export const ZELLE_NUMBER_RAW = '7274002225';
-export const ZELLE_NUMBER_DISPLAY = '(727) 400-2225';
+// WP-08: the Venmo/Zelle identity is NOT a constant here. It comes from the
+// tenant settings row the coach edits, via GET /api/pricing/payment-methods.
+// Hardcoding it made that settings page a lie and created a second source of
+// truth. The builders below take the handle as a parameter and stay pure.
 
 /** Stripe Payment Link per package (keyed by service id). Empty until live. */
 export const STRIPE_PAYMENT_LINKS: Record<string, string> = {};
@@ -59,15 +60,38 @@ export function packageNote(pkg: PublicPricingPackage): string {
   return `${pkg.name}${cadence}${spm}`;
 }
 
-function venmoPayHref(amountUsd: number, note: string): string {
+function venmoPayHref(
+  venmoHandle: string,
+  amountUsd: number,
+  note: string,
+): string {
   const params = new URLSearchParams({
     txn: 'pay',
     audience: 'private',
-    recipients: VENMO_HANDLE,
+    recipients: venmoHandle,
     amount: String(amountUsd),
     note,
   });
   return `https://venmo.com/?${params.toString()}`;
+}
+
+/** Venmo profile deep link, or null when the tenant has no handle configured. */
+export function venmoProfileHref(venmoHandle: string | null): string | null {
+  return venmoHandle ? `https://venmo.com/u/${venmoHandle}` : null;
+}
+
+/**
+ * "(727) 400-2225" from "7274002225". Falls back to the raw string for
+ * anything that is not a 10-digit US number, so an international or
+ * already-formatted value is shown as the coach entered it.
+ */
+export function formatZellePhone(raw: string | null): string | null {
+  if (!raw) return null;
+  const digits = raw.replace(/\D/g, '');
+  if (digits.length === 10) {
+    return `(${digits.slice(0, 3)}) ${digits.slice(3, 6)}-${digits.slice(6)}`;
+  }
+  return raw;
 }
 
 /**
@@ -75,18 +99,28 @@ function venmoPayHref(amountUsd: number, note: string): string {
  * only when the provider is 'stripe' AND a Payment Link exists; else Venmo.
  * The ONE place a new provider is wired in.
  */
-export function getCheckoutHref(pkg: PublicPricingPackage): string {
+export function getCheckoutHref(
+  pkg: PublicPricingPackage,
+  venmoHandle: string | null,
+): string | null {
   if (PAYMENTS_PROVIDER === 'stripe') {
     const link = STRIPE_PAYMENT_LINKS[pkg.id];
     if (link) return link;
   }
-  return venmoPayHref(packageAmountUsd(pkg), packageNote(pkg));
+  // No configured handle means no payable link. Returning null lets the caller
+  // render a disabled control instead of a Venmo URL that pays nobody.
+  if (!venmoHandle) return null;
+  return venmoPayHref(venmoHandle, packageAmountUsd(pkg), packageNote(pkg));
 }
 
 /** Button label for a package, matching whichever provider handles it. */
-export function getCheckoutLabel(pkg: PublicPricingPackage): string {
+export function getCheckoutLabel(
+  pkg: PublicPricingPackage,
+  venmoHandle: string | null,
+): string {
   const usingStripe =
     PAYMENTS_PROVIDER === 'stripe' && Boolean(STRIPE_PAYMENT_LINKS[pkg.id]);
   const price = packagePriceLabel(pkg);
-  return usingStripe ? `Pay ${price}` : `Pay ${price} with Venmo`;
+  if (usingStripe) return `Pay ${price}`;
+  return venmoHandle ? `Pay ${price} with Venmo` : price;
 }
