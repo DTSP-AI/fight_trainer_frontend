@@ -11,7 +11,10 @@ self.addEventListener('activate', (event) => {
 });
 
 self.addEventListener('push', (event) => {
-  let data = { title: 'Fight Trainer', body: '', url: '/', kind: 'generic' };
+  // M4: a static service worker cannot read config, so the fallback title is
+  // deliberately brand-free. Every real push carries its own title; this only
+  // shows if the payload is malformed.
+  let data = { title: 'New notification', body: '', url: '/', kind: 'generic' };
   try {
     if (event.data) data = { ...data, ...event.data.json() };
   } catch (_) {

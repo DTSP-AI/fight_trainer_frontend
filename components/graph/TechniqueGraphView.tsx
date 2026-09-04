@@ -6,6 +6,7 @@
  * everything into the kg_schema.json shape the 3D component expects.
  */
 import { useEffect, useMemo, useState } from 'react';
+import { BRAND } from '@/lib/brand';
 import { KnowledgeGraph3D } from './KnowledgeGraph3D';
 import {
   graphApi,
@@ -244,7 +245,7 @@ export function TechniqueGraphView({
       edges: mappedEdges,
       palette,
       edgePalette: INITIATIVE_PALETTE,
-      metadata: { project: 'Fight Trainer KG' },
+      metadata: { project: `${BRAND.name} KG` },
     };
   }, [nodes, edges, drilled, focus, studentId]);
 

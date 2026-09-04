@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { BRAND } from '@/lib/brand';
 import { Save } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
@@ -145,7 +146,7 @@ export default function TrainerPaymentSettingsPage() {
               <Label htmlFor="zelle_display">Display name (optional)</Label>
               <Input
                 id="zelle_display"
-                placeholder="Fight Trainer"
+                placeholder={BRAND.name}
                 value={zelleDisplayName}
                 onChange={(e) => setZelleDisplayName(e.target.value)}
               />
