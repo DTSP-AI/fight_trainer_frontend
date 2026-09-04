@@ -83,13 +83,6 @@ export interface Tenant {
   created_at?: string;
 }
 
-export interface UserRow {
-  id: string;
-  email: string;
-  role: UserRole;
-  tenant_id: string;
-  full_name?: string | null;
-}
 
 export interface Student {
   id: string;

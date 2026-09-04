@@ -30,9 +30,6 @@ export function buildYouTubeEmbedUrl(
   return `https://www.youtube.com/embed/${encodeURIComponent(youtubeId)}?${params.toString()}`;
 }
 
-export function youtubeThumb(youtubeId: string): string {
-  return `https://i.ytimg.com/vi/${encodeURIComponent(youtubeId)}/hqdefault.jpg`;
-}
 
 /**
  * Compute the clip duration in seconds from start/end.
