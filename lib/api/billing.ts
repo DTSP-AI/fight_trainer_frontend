@@ -334,6 +334,25 @@ export const billingApi = {
     ),
   cancelInvoice: (invoiceId: string) =>
     apiClient.post(`/api/invoices/${encodeURIComponent(invoiceId)}/cancel`, {}),
+  /** Record money that arrived off-Stripe (Venmo/Zelle/cash/bank) against an
+   *  invoice. Stripe payments are recorded by webhook and rejected here. */
+  recordInvoicePayment: (
+    invoiceId: string,
+    payload: {
+      amount_cents: number;
+      method: Exclude<PaymentMethod, 'stripe'>;
+      external_reference?: string;
+      notes?: string;
+    },
+  ) =>
+    apiClient.post<{
+      invoice_id: string;
+      amount_recorded_cents: number;
+      balance_after_cents: number;
+    }>(
+      `/api/invoices/${encodeURIComponent(invoiceId)}/record-payment`,
+      payload,
+    ),
 
   // invoices (public — student view)
   getPublicInvoice: (token: string) =>
