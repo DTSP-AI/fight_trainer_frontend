@@ -35,14 +35,52 @@ export function Hero() {
               {BRAND.tagline}
             </h1>
             <p className="mt-6 max-w-2xl text-base text-muted-foreground md:text-lg">
-              After every session, get a personal clip of the technique you
-              drilled — pulled from canonical fight footage of the greats — with
-              a cue from your coach. Usually within 90 seconds.
+              Track every training session, see your progress, and understand
+              the skills you&apos;re building — through AI-powered breakdowns
+              of how they play out in real fights.
             </p>
-            <p className="mt-3 max-w-2xl text-sm text-muted-foreground/80">
-              Focused coaching, consistent reps, and immediate feedback — the
-              fastest way to actually improve.
-            </p>
+            <ul className="mt-6 max-w-xl space-y-2 text-left text-sm text-muted-foreground md:text-base">
+              <li className="flex gap-3">
+                <span className="text-primary" aria-hidden="true">
+                  ▸
+                </span>
+                <span>
+                  <span className="text-foreground">Session tracking.</span>{' '}
+                  Every session logged: what you drilled, how it went, your
+                  coach&apos;s notes.
+                </span>
+              </li>
+              <li className="flex gap-3">
+                <span className="text-primary" aria-hidden="true">
+                  ▸
+                </span>
+                <span>
+                  <span className="text-foreground">Progress you can see.</span>{' '}
+                  A training plan that adjusts as you improve, and a history
+                  that shows it.
+                </span>
+              </li>
+              <li className="flex gap-3">
+                <span className="text-primary" aria-hidden="true">
+                  ▸
+                </span>
+                <span>
+                  <span className="text-foreground">Skill breakdowns.</span>{' '}
+                  AI finds the technique you trained in real fights and breaks
+                  down what the best do with it.
+                </span>
+              </li>
+              <li className="flex gap-3">
+                <span className="text-primary" aria-hidden="true">
+                  ▸
+                </span>
+                <span>
+                  <span className="text-foreground">Fight analysis.</span>{' '}
+                  Break down any fight through the lens of what you&apos;ve
+                  learned.
+                </span>
+              </li>
+            </ul>
             <div className="mt-10 flex flex-wrap justify-center gap-3">
               <Button asChild size="lg">
                 <Link href="/auth/signup">

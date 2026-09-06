@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { BRAND } from '@/lib/brand';
+import { BrandLogo } from '@/components/common/brand-logo';
 
 export default function AuthLayout({
   children,
@@ -10,11 +10,8 @@ export default function AuthLayout({
     <div className="flex min-h-screen flex-col bg-background">
       <header className="border-b border-border">
         <div className="mx-auto flex h-14 max-w-7xl items-center px-4 md:px-8">
-          <Link
-            href="/"
-            className="text-base font-semibold tracking-tight text-foreground"
-          >
-            {BRAND.name}
+          <Link href="/" className="flex items-center">
+            <BrandLogo height={44} priority />
           </Link>
         </div>
       </header>

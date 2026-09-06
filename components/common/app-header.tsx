@@ -13,7 +13,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { signOut } from '@/lib/auth';
-import { BRAND } from '@/lib/brand';
+import { BrandLogo } from '@/components/common/brand-logo';
 
 interface AppHeaderProps {
   homeHref: string;
@@ -23,7 +23,7 @@ interface AppHeaderProps {
 }
 
 /**
- * Top bar for authed surfaces. Brand mark text reads from BRAND (M4).
+ * Top bar for authed surfaces. Brand mark is the BRAND wordmark (M4).
  * Sign-out drops the Supabase session and routes to /auth/login.
  */
 export function AppHeader({ homeHref, rightSlot, subtitle }: AppHeaderProps) {
@@ -41,9 +41,7 @@ export function AppHeader({ homeHref, rightSlot, subtitle }: AppHeaderProps) {
     <header className="sticky top-0 z-40 flex h-14 items-center justify-between gap-4 border-b border-border bg-background/95 px-4 backdrop-blur md:px-6">
       <div className="flex items-center gap-3">
         <Link href={homeHref} className="flex items-center gap-2">
-          <span className="text-base font-semibold tracking-tight text-foreground">
-            {BRAND.name}
-          </span>
+          <BrandLogo height={38} priority />
           {subtitle ? (
             <span className="hidden text-xs text-muted-foreground md:inline">
               · {subtitle}

@@ -19,15 +19,15 @@ export default function AboutPage() {
         <div className="mt-8 space-y-6 text-muted-foreground md:text-lg">
           <p>
             Generic fitness apps don&apos;t know combat sport. You don&apos;t
-            need another habit tracker — you need to see the technique you
-            drilled tonight in the hands of the people who pioneered it, and a
-            clear cue to carry into the next round.
+            need another habit tracker — you need a record of what you trained,
+            a clear view of how you&apos;re progressing, and a real
+            understanding of the skills you&apos;re building.
           </p>
           <p>
-            {BRAND.name} is private coaching with a memory. Train with your
-            coach, and within about 90 seconds you get a personal clip from
-            canonical fight footage of exactly what you worked on — plus a short
-            cue written for you.
+            {BRAND.name} is private coaching with a memory. Every session is
+            logged with your coach. AI matches the techniques you drilled to
+            real fights and breaks down what the best in the sport do with
+            them, so each session adds to something you can see.
           </p>
           <p className="text-foreground">How a session becomes progress:</p>
           <ol className="list-decimal space-y-3 pl-6">
@@ -36,19 +36,20 @@ export default function AboutPage() {
               technique with your coach, live on the mat.
             </li>
             <li>
-              <span className="text-foreground">It gets matched.</span> What you
-              drilled is matched to the highest level of the sport — Marcelo,
-              Khabib, Saenchai, Lomachenko, the receipts.
+              <span className="text-foreground">It gets logged.</span> What you
+              drilled, how it went, and the cue your coach wants you to carry
+              forward — recorded, not remembered.
             </li>
             <li>
-              <span className="text-foreground">You get your clip.</span> On
-              your phone, in your portal, before you even leave the building —
-              with a 2–4 sentence cue from your coach.
+              <span className="text-foreground">You understand it.</span> AI
+              finds the same technique in real fights and breaks down how the
+              best apply it, personalized to your training history.
             </li>
             <li>
               <span className="text-foreground">You improve.</span> Your plan
-              adjusts as you progress, and your coach sees when you drift — so
-              you stay on track instead of fading out.
+              adjusts as you progress, your history shows how far you&apos;ve
+              come, and your coach sees when you drift — so you stay on track
+              instead of fading out.
             </li>
           </ol>
         </div>

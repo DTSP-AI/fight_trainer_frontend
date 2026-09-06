@@ -1,28 +1,28 @@
 'use client';
 
 import { LazyMotion, domAnimation, m, useReducedMotion } from 'motion/react';
-import { Clock4, Library, Layers, Repeat } from 'lucide-react';
+import { ClipboardList, Film, Library, TrendingUp } from 'lucide-react';
 
 const FEATURES = [
   {
-    icon: Clock4,
-    title: 'Personal clips, fast',
-    body: 'After every session you get a clip of the exact technique you drilled — usually within 90 seconds of leaving the mat.',
+    icon: ClipboardList,
+    title: 'Log every session',
+    body: 'What you drilled, how it went, and the cue your coach wants you to carry into next time. A record of your training, not a memory of it.',
+  },
+  {
+    icon: TrendingUp,
+    title: 'See your progress',
+    body: 'A training plan your coach adjusts as you improve, a history that shows how far you have come, and a coach who notices when you go quiet.',
   },
   {
     icon: Library,
-    title: 'See it done right',
-    body: 'Your technique in the hands of the greats — Marcelo, Khabib, Saenchai, Lomachenko. The highest level of the sport, matched to what you trained.',
+    title: 'Understand the skill',
+    body: 'AI matches each technique you trained to real fights and breaks down what the best in the sport do with it, so you know what you are building toward.',
   },
   {
-    icon: Layers,
-    title: 'A real plan',
-    body: 'A weekly structure your coach adjusts as you progress — tuned after a breakthrough or a rough night, never on autopilot.',
-  },
-  {
-    icon: Repeat,
-    title: 'Stay accountable',
-    body: 'When you go quiet, your coach knows — and pulls you back in before a break turns into quitting.',
+    icon: Film,
+    title: 'Break down real fights',
+    body: 'Analyze any fight through the lens of what you have learned. Personalized to your training history, not generic commentary.',
   },
 ];
 
@@ -43,9 +43,9 @@ export function Features() {
               The loop
             </h2>
             <p className="mt-4 text-muted-foreground md:text-lg">
-              You drill it tonight. You see it done by the people who pioneered
-              it. You carry a cue into next session and do it better. That&apos;s
-              the loop — and it&apos;s how you actually get good.
+              You train. It gets logged. AI shows you the same technique in
+              real fights and what to look for. Next session, you do it better.
+              That&apos;s the loop — and it&apos;s how you actually get good.
             </p>
           </div>
 
