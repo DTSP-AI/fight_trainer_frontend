@@ -7,7 +7,7 @@ export function Footer() {
     <footer className="border-t border-border bg-background">
       <div className="mx-auto flex max-w-7xl flex-col items-start justify-between gap-4 px-4 py-10 text-sm text-muted-foreground md:flex-row md:items-center md:px-8">
         <div className="flex items-center gap-3">
-          <BrandLogo height={22} />
+          <BrandLogo height={30} />
           <span>·</span>
           <span>{BRAND.domain}</span>
         </div>

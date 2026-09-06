@@ -41,7 +41,7 @@ export function AppHeader({ homeHref, rightSlot, subtitle }: AppHeaderProps) {
     <header className="sticky top-0 z-40 flex h-14 items-center justify-between gap-4 border-b border-border bg-background/95 px-4 backdrop-blur md:px-6">
       <div className="flex items-center gap-3">
         <Link href={homeHref} className="flex items-center gap-2">
-          <BrandLogo height={26} priority />
+          <BrandLogo height={38} priority />
           {subtitle ? (
             <span className="hidden text-xs text-muted-foreground md:inline">
               · {subtitle}

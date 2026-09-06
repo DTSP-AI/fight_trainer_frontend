@@ -11,7 +11,7 @@ export default function AuthLayout({
       <header className="border-b border-border">
         <div className="mx-auto flex h-14 max-w-7xl items-center px-4 md:px-8">
           <Link href="/" className="flex items-center">
-            <BrandLogo height={30} priority />
+            <BrandLogo height={44} priority />
           </Link>
         </div>
       </header>
