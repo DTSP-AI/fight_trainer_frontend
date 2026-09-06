@@ -17,7 +17,7 @@ export default function manifest(): MetadataRoute.Manifest {
     name: BRAND.name,
     short_name: BRAND.name,
     description:
-      'AI coaching platform connecting every session to canonical fight footage.',
+      'Track training sessions, progress and skills with AI-powered breakdowns of real fights.',
     start_url: '/',
     display: 'standalone',
     background_color: '#0f0f0f',
