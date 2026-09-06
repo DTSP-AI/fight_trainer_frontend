@@ -7,7 +7,7 @@
  */
 
 export const BRAND = {
-  name: process.env.NEXT_PUBLIC_BUYER_BRAND_NAME ?? 'Fight Trainer',
+  name: process.env.NEXT_PUBLIC_BUYER_BRAND_NAME ?? 'FightCoachHQ',
   // Client-facing (fighters). Config-driven per M4 — override via env.
   tagline:
     process.env.NEXT_PUBLIC_BUYER_BRAND_TAGLINE ??
