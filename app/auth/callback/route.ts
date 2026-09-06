@@ -52,6 +52,12 @@ export async function GET(request: Request) {
     // Route by the signed role claim. Google is not student-only: a trainer
     // (or admin) who signs in with Google must land in their own portal, not
     // on the student claim page, which rejects non-student accounts.
+    //
+    // Students ALWAYS continue to `next` (the accept page). Its claim call is
+    // idempotent and is the only thing that binds the roster row to the auth
+    // user. Legacy accounts can carry student claims while their roster row is
+    // still unbound — skipping the claim for them leaves the coach seeing
+    // "pending" forever.
     const meta = (data.session?.user.app_metadata ?? {}) as Record<
       string,
       unknown
@@ -59,8 +65,6 @@ export async function GET(request: Request) {
     const role = meta['user_role'] ?? meta['role'];
     if (role === 'trainer') roleDest = '/trainer';
     else if (role === 'dtsp_admin') roleDest = '/dtsp-admin';
-    else if (role === 'student' && typeof meta['student_id'] === 'string')
-      roleDest = '/student';
   } catch (e) {
     const msg = e instanceof Error ? e.message : 'unknown';
     return loginRedirect('exchange_threw', msg);
