@@ -42,18 +42,33 @@ export async function GET(request: Request) {
     return loginRedirect('no_code', 'no authorization code on the callback');
   }
 
+  let roleDest: string | null = null;
   try {
     const supabase = await getSupabaseServer();
-    const { error } = await supabase.auth.exchangeCodeForSession(code);
+    const { data, error } = await supabase.auth.exchangeCodeForSession(code);
     if (error) {
       return loginRedirect('exchange_failed', error.message);
     }
+    // Route by the signed role claim. Google is not student-only: a trainer
+    // (or admin) who signs in with Google must land in their own portal, not
+    // on the student claim page, which rejects non-student accounts.
+    const meta = (data.session?.user.app_metadata ?? {}) as Record<
+      string,
+      unknown
+    >;
+    const role = meta['user_role'] ?? meta['role'];
+    if (role === 'trainer') roleDest = '/trainer';
+    else if (role === 'dtsp_admin') roleDest = '/dtsp-admin';
+    else if (role === 'student' && typeof meta['student_id'] === 'string')
+      roleDest = '/student';
   } catch (e) {
     const msg = e instanceof Error ? e.message : 'unknown';
     return loginRedirect('exchange_threw', msg);
   }
 
-  // Session cookies are set on the response; land on the intended next page.
-  const dest = next.startsWith('/') ? `${origin}${next}` : `${origin}/`;
-  return NextResponse.redirect(dest);
+  // Session cookies are set on the response. A user with a role claim goes to
+  // their portal; a user with no claims yet (first-time student) continues to
+  // `next`, which is the accept page that binds them.
+  const target = roleDest ?? (next.startsWith('/') ? next : '/');
+  return NextResponse.redirect(`${origin}${target}`);
 }
