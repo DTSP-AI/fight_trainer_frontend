@@ -19,6 +19,9 @@ export const metadata: Metadata = {
 export const viewport: Viewport = {
   width: 'device-width',
   initialScale: 1,
+  // Lets the bottom tab bar and header pad into the notch / home-indicator
+  // areas via env(safe-area-inset-*) instead of leaving a dead strip.
+  viewportFit: 'cover',
   themeColor: '#0f0f0f',
 };
 
