@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
-import { ArrowLeft, Copy, Send, ExternalLink, Plus, Wallet } from 'lucide-react';
+import { Copy, Send, ExternalLink, Plus, Wallet } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -22,6 +22,7 @@ import {
 import { studentsApi } from '@/lib/api/students';
 import { describeApiError } from '@/lib/api';
 import { SharedStudentPicker } from '@/components/trainer/shared-student-picker';
+import { StudentCrumbs } from '@/components/trainer/student-crumbs';
 import type { Student } from '@/lib/types';
 
 // Stripe is deliberately absent: those payments are recorded by webhook, and
@@ -91,12 +92,7 @@ export default function StudentBillingPage() {
 
   return (
     <div className="mx-auto max-w-5xl space-y-6">
-      <Button asChild variant="ghost" size="sm">
-        <Link href={`/trainer/students/${studentId}`}>
-          <ArrowLeft className="h-4 w-4" />
-          Back to {student.full_name}
-        </Link>
-      </Button>
+      <StudentCrumbs studentId={studentId} current="Billing" />
 
       <div>
         <h1 className="text-3xl font-semibold tracking-tight">

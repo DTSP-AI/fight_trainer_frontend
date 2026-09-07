@@ -1,11 +1,19 @@
 import { Suspense } from 'react';
 import { PlanEditor } from '@/components/trainer/plan-editor';
 import { PlanAdjustmentsPanel } from '@/components/trainer/plan-adjustments-panel';
+import { StudentCrumbsFromQuery } from '@/components/trainer/student-crumbs';
 import { LoadingState } from '@/components/common/loading-state';
 
 export default function TrainerPlansPage() {
   return (
     <div className="mx-auto max-w-5xl space-y-6">
+      <Suspense fallback={null}>
+        <StudentCrumbsFromQuery
+          param="studentId"
+          section={{ label: 'Plans', href: '/trainer/plans' }}
+          current="Plan editor"
+        />
+      </Suspense>
       <div>
         <h1 className="text-3xl font-semibold tracking-tight">Plans</h1>
         <p className="mt-1 text-sm text-muted-foreground">

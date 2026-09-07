@@ -8,6 +8,7 @@ import {
   useRef,
   useState,
 } from 'react';
+import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import {
   AlertTriangle,
@@ -45,6 +46,7 @@ import {
 import { calendarApi, type CalendarEvent } from '@/lib/api/calendar';
 import { studentsApi } from '@/lib/api/students';
 import { SharedStudentPicker } from '@/components/trainer/shared-student-picker';
+import { StudentCrumbs } from '@/components/trainer/student-crumbs';
 import { describeApiError } from '@/lib/api';
 import { cn } from '@/lib/utils';
 import type { Student } from '@/lib/types';
@@ -232,6 +234,13 @@ function BillingHubContent() {
 
   return (
     <div className="mx-auto max-w-6xl space-y-8">
+      {preselectStudentId ? (
+        <StudentCrumbs
+          studentId={preselectStudentId}
+          section={{ label: 'Billing', href: '/trainer/billing' }}
+          current={wantsSchedule ? 'Book session' : 'Packages'}
+        />
+      ) : null}
       <div>
         <h1 className="text-3xl font-semibold tracking-tight">Billing</h1>
         <p className="mt-1 text-sm text-muted-foreground">
@@ -1080,8 +1089,17 @@ function PackageRowItem({
     >
       <div className="min-w-0 flex-1">
         <div className="flex flex-wrap items-center gap-2 text-sm font-semibold">
-          {student?.full_name ?? '(unknown student)'} ·{' '}
-          {service?.name ?? '(deleted service)'}
+          {student ? (
+            <Link
+              href={`/trainer/students/${student.id}`}
+              className="hover:underline"
+            >
+              {student.full_name}
+            </Link>
+          ) : (
+            '(unknown student)'
+          )}{' '}
+          · {service?.name ?? '(deleted service)'}
           {lowBalance ? (
             <Badge variant="default" className="bg-violet-500/30 text-violet-100">
               Re-up time
@@ -1582,7 +1600,16 @@ function SessionRow({
     <div className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-border bg-background/40 p-3">
       <div className="min-w-0 flex-1">
         <div className="text-sm font-semibold">
-          {student?.full_name ?? '(unknown student)'}
+          {student ? (
+            <Link
+              href={`/trainer/students/${student.id}`}
+              className="hover:underline"
+            >
+              {student.full_name}
+            </Link>
+          ) : (
+            '(unknown student)'
+          )}
         </div>
         <div className="mt-0.5 text-xs text-muted-foreground">
           {fmtWhen(s.scheduled_for)} · {s.duration_minutes}m ·{' '}

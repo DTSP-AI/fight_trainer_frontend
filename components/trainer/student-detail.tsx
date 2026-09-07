@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { CalendarPlus, Mail, Plus, Receipt, Trash2 } from 'lucide-react';
+import { CalendarPlus, Mail, Pencil, Plus, Receipt, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -15,6 +15,8 @@ import { studentsApi } from '@/lib/api/students';
 import { describeApiError } from '@/lib/api';
 import { formatDate, formatRelative } from '@/lib/utils';
 import { canResendInvite, useResendInvite } from './use-resend-invite';
+import { Breadcrumbs } from '@/components/common/breadcrumbs';
+import { rememberStudentName } from './student-crumbs';
 import type { StudentDetailResponse } from '@/lib/types';
 
 interface StudentDetailProps {
@@ -81,6 +83,7 @@ export function StudentDetail({ studentId }: StudentDetailProps) {
     studentsApi
       .get(studentId)
       .then((res) => {
+        rememberStudentName(res.student.id, res.student.full_name);
         if (!cancelled) setData(res);
       })
       .catch((err: unknown) => {
@@ -104,6 +107,12 @@ export function StudentDetail({ studentId }: StudentDetailProps) {
 
   return (
     <div className="space-y-6">
+      <Breadcrumbs
+        items={[
+          { label: 'Students', href: '/trainer/students' },
+          { label: student.full_name },
+        ]}
+      />
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">
@@ -132,6 +141,12 @@ export function StudentDetail({ studentId }: StudentDetailProps) {
           <Button asChild variant="outline">
             <Link href={`/trainer/plans?studentId=${student.id}`}>
               Edit plan
+            </Link>
+          </Button>
+          <Button asChild variant="outline">
+            <Link href={`/trainer/students/${student.id}/edit`}>
+              <Pencil className="h-4 w-4" />
+              Edit profile
             </Link>
           </Button>
           <Button asChild variant="outline">
