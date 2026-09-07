@@ -49,7 +49,16 @@ export default function StudentLayout({
 }) {
   return (
     <RoleGate role="student">
-      <AppShell role="Student" homeHref="/student/feed" groups={GROUPS} primary={PRIMARY}>
+      <AppShell
+        role="Student"
+        homeHref="/student/feed"
+        groups={GROUPS}
+        primary={PRIMARY}
+        accountLinks={[
+          { href: '/student/profile', label: 'My profile', icon: <User className="h-4 w-4" /> },
+          { href: '/student/intake', label: 'My intake', icon: <ClipboardList className="h-4 w-4" /> },
+        ]}
+      >
         <IntakeReminder />
         {children}
       </AppShell>

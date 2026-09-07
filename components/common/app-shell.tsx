@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import * as DialogPrimitive from '@radix-ui/react-dialog';
 import { LogOut, Menu, MoreHorizontal, X } from 'lucide-react';
-import { AppHeader } from '@/components/common/app-header';
+import { AppHeader, type AccountLink } from '@/components/common/app-header';
 import { BrandLogo } from '@/components/common/brand-logo';
 import { cn } from '@/lib/utils';
 import { signOut } from '@/lib/auth';
@@ -35,6 +35,8 @@ interface AppShellProps {
    * lives behind "More", which opens the same drawer as the hamburger.
    */
   primary: string[];
+  /** Role-specific account menu destinations (profile, settings). */
+  accountLinks?: AccountLink[];
   children: React.ReactNode;
 }
 
@@ -59,7 +61,14 @@ function useIsActive() {
  *
  * Every nav link sets aria-current="page" when active; targets are ≥ 44px.
  */
-export function AppShell({ role, homeHref, groups, primary, children }: AppShellProps) {
+export function AppShell({
+  role,
+  homeHref,
+  groups,
+  primary,
+  accountLinks,
+  children,
+}: AppShellProps) {
   const [drawerOpen, setDrawerOpen] = useState(false);
 
   const allItems = groups.flatMap((g) => g.items);
@@ -74,6 +83,7 @@ export function AppShell({ role, homeHref, groups, primary, children }: AppShell
       <AppHeader
         homeHref={homeHref}
         subtitle={role}
+        accountLinks={accountLinks}
         leading={
           <DialogPrimitive.Root open={drawerOpen} onOpenChange={setDrawerOpen}>
             <DialogPrimitive.Trigger asChild>

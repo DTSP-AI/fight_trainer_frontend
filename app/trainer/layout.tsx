@@ -21,7 +21,7 @@ const GROUPS: NavGroup[] = [
   {
     items: [
       { href: '/trainer', label: 'Dashboard', icon: <Activity className="h-4 w-4" />, exact: true },
-      { href: '/trainer/students', label: 'Students', icon: <Users className="h-4 w-4" /> },
+      { href: '/trainer/students', label: 'Clients', icon: <Users className="h-4 w-4" /> },
       { href: '/trainer/sessions', label: 'Sessions', icon: <Film className="h-4 w-4" /> },
       { href: '/trainer/billing', label: 'Billing', icon: <Receipt className="h-4 w-4" /> },
       { href: '/trainer/plans', label: 'Plans', icon: <CalendarDays className="h-4 w-4" /> },
@@ -61,7 +61,16 @@ export default function TrainerLayout({
 }) {
   return (
     <RoleGate role="trainer">
-      <AppShell role="Coach" homeHref="/trainer" groups={GROUPS} primary={PRIMARY}>
+      <AppShell
+        role="Coach"
+        homeHref="/trainer"
+        groups={GROUPS}
+        primary={PRIMARY}
+        accountLinks={[
+          { href: '/trainer/settings/payments', label: 'Payment settings', icon: <Wallet className="h-4 w-4" /> },
+          { href: '/trainer/settings/integrations', label: 'Integrations', icon: <Plug className="h-4 w-4" /> },
+        ]}
+      >
         {children}
       </AppShell>
     </RoleGate>

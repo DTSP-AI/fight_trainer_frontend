@@ -6,12 +6,12 @@ export default function NewStudentPage() {
     <div className="mx-auto max-w-2xl space-y-6">
       <Breadcrumbs
         items={[
-          { label: 'Students', href: '/trainer/students' },
-          { label: 'Add student' },
+          { label: 'Clients', href: '/trainer/students' },
+          { label: 'Add client' },
         ]}
       />
       <div>
-        <h1 className="text-3xl font-semibold tracking-tight">Add student</h1>
+        <h1 className="text-3xl font-semibold tracking-tight">Add client</h1>
         <p className="mt-1 text-sm text-muted-foreground">
           They get an invite link and join your roster on accept.
         </p>

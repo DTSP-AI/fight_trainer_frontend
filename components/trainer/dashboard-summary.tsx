@@ -13,10 +13,10 @@ const TILES: {
   label: string;
   icon: React.ComponentType<{ className?: string }>;
 }[] = [
-  { key: 'active_students_count', label: 'Active students', icon: Users },
+  { key: 'active_students_count', label: 'Active clients', icon: Users },
   { key: 'sessions_this_week', label: 'Sessions this week', icon: Activity },
   { key: 'clips_delivered_this_week', label: 'Clips delivered', icon: Film },
-  { key: 'students_at_risk', label: 'Students at risk', icon: AlertTriangle },
+  { key: 'students_at_risk', label: 'Clients at risk', icon: AlertTriangle },
 ];
 
 export function DashboardSummaryTiles() {

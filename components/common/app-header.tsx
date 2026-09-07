@@ -15,8 +15,16 @@ import {
 import { signOut } from '@/lib/auth';
 import { BrandLogo } from '@/components/common/brand-logo';
 
+export interface AccountLink {
+  href: string;
+  label: string;
+  icon?: React.ReactNode;
+}
+
 interface AppHeaderProps {
   homeHref: string;
+  /** Role-specific destinations (profile, settings) shown above Sign out. */
+  accountLinks?: AccountLink[];
   /** Left of the brand mark — the mobile menu trigger lives here. */
   leading?: React.ReactNode;
   rightSlot?: React.ReactNode;
@@ -28,7 +36,13 @@ interface AppHeaderProps {
  * Top bar for authed surfaces. Brand mark is the BRAND wordmark (M4).
  * Sign-out drops the Supabase session and routes to /auth/login.
  */
-export function AppHeader({ homeHref, leading, rightSlot, subtitle }: AppHeaderProps) {
+export function AppHeader({
+  homeHref,
+  accountLinks = [],
+  leading,
+  rightSlot,
+  subtitle,
+}: AppHeaderProps) {
   const router = useRouter();
 
   async function handleSignOut() {
@@ -66,6 +80,15 @@ export function AppHeader({ homeHref, leading, rightSlot, subtitle }: AppHeaderP
           <DropdownMenuContent align="end">
             <DropdownMenuLabel>Account</DropdownMenuLabel>
             <DropdownMenuSeparator />
+            {accountLinks.map((l) => (
+              <DropdownMenuItem key={l.href} asChild>
+                <Link href={l.href}>
+                  {l.icon}
+                  {l.label}
+                </Link>
+              </DropdownMenuItem>
+            ))}
+            {accountLinks.length > 0 ? <DropdownMenuSeparator /> : null}
             <DropdownMenuItem onSelect={handleSignOut}>
               <LogOut className="h-4 w-4" />
               Sign out

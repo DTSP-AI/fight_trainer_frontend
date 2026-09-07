@@ -55,7 +55,7 @@ export function StudentCrumbs({
 }) {
   const name = useStudentName(studentId);
   const items: Crumb[] = [
-    section ?? { label: 'Students', href: '/trainer/students' },
+    section ?? { label: 'Clients', href: '/trainer/students' },
     { label: name ?? 'Client', href: `/trainer/students/${studentId}` },
     { label: current },
   ];
