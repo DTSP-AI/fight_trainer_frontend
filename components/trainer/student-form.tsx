@@ -24,6 +24,7 @@ import type {
   InviteDelivery,
   Sport,
   SkillLevel,
+  Student,
   StudentCreateResponse,
 } from '@/lib/types';
 
@@ -67,8 +68,15 @@ const schema = z.object({
 
 type FormValues = z.infer<typeof schema>;
 
-export function StudentForm() {
+/**
+ * Create (no `initial`) or edit (`initial` = existing student) a client's
+ * basics. Edit mode PATCHes and returns to the profile; the invite email is
+ * deliberately not on this form — it has its own guarded editor on the
+ * profile page (rejected once the account is claimed).
+ */
+export function StudentForm({ initial }: { initial?: Student } = {}) {
   const router = useRouter();
+  const isEdit = Boolean(initial);
   const [submitting, setSubmitting] = useState(false);
   const [created, setCreated] = useState<StudentCreateResponse | null>(null);
   const {
@@ -79,14 +87,23 @@ export function StudentForm() {
     formState: { errors },
   } = useForm<FormValues>({
     resolver: zodResolver(schema),
-    defaultValues: {
-      full_name: '',
-      primary_sport: 'bjj',
-      skill_level: 'white',
-      started_training_at: '',
-      invite_email: '',
-      notes: '',
-    },
+    defaultValues: initial
+      ? {
+          full_name: initial.full_name,
+          primary_sport: initial.primary_sport,
+          skill_level: initial.skill_level ?? undefined,
+          started_training_at: initial.started_training_at ?? '',
+          invite_email: '',
+          notes: initial.notes ?? '',
+        }
+      : {
+          full_name: '',
+          primary_sport: 'bjj',
+          skill_level: 'white',
+          started_training_at: '',
+          invite_email: '',
+          notes: '',
+        },
   });
 
   const sport = watch('primary_sport');
@@ -99,6 +116,25 @@ export function StudentForm() {
       return;
     }
     setSubmitting(true);
+    if (isEdit && initial) {
+      try {
+        await studentsApi.update(initial.id, {
+          full_name: values.full_name,
+          primary_sport: values.primary_sport,
+          skill_level: isBjj ? values.skill_level : undefined,
+          started_training_at: values.started_training_at || null,
+          notes: values.notes ?? null,
+        });
+        toast.success('Profile saved.');
+        router.push(`/trainer/students/${initial.id}`);
+        router.refresh();
+      } catch (err) {
+        toast.error(describeApiError(err));
+      } finally {
+        setSubmitting(false);
+      }
+      return;
+    }
     try {
       const result = await studentsApi.create({
         full_name: values.full_name,
@@ -206,20 +242,22 @@ export function StudentForm() {
             {...register('started_training_at')}
           />
         </div>
-        <div className="grid gap-2">
-          <Label htmlFor="invite_email">Invite email</Label>
-          <Input
-            id="invite_email"
-            type="email"
-            placeholder="student@email.com"
-            {...register('invite_email')}
-          />
-          {errors.invite_email ? (
-            <p className="text-xs text-destructive">
-              {errors.invite_email.message}
-            </p>
-          ) : null}
-        </div>
+        {isEdit ? null : (
+          <div className="grid gap-2">
+            <Label htmlFor="invite_email">Invite email</Label>
+            <Input
+              id="invite_email"
+              type="email"
+              placeholder="student@email.com"
+              {...register('invite_email')}
+            />
+            {errors.invite_email ? (
+              <p className="text-xs text-destructive">
+                {errors.invite_email.message}
+              </p>
+            ) : null}
+          </div>
+        )}
       </div>
 
       <div className="grid gap-2">
@@ -236,7 +274,7 @@ export function StudentForm() {
 
       <div className="flex items-center gap-2">
         <Button type="submit" disabled={submitting}>
-          {submitting ? 'Saving…' : 'Add student'}
+          {submitting ? 'Saving…' : isEdit ? 'Save changes' : 'Add student'}
         </Button>
         <Button
           type="button"
@@ -305,7 +343,7 @@ function InviteSentPanel({
           <span className="font-mono text-xs">
             {delivery.external_id ?? '—'}
           </span>
-          ). Tell them to check spam if they don't see it in a minute.
+          ). Tell them to check spam if they don&apos;t see it in a minute.
         </p>
       ) : delivery?.status === 'skipped' ? (
         <p className="rounded-md border border-amber-500/40 bg-amber-500/10 p-3 text-sm">
