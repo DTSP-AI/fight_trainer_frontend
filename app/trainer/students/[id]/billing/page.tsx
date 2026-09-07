@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
-import { ArrowLeft, Copy, Send, ExternalLink, Plus, Wallet } from 'lucide-react';
+import { Copy, Send, ExternalLink, Plus, Wallet } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -21,6 +21,8 @@ import {
 } from '@/lib/api/billing';
 import { studentsApi } from '@/lib/api/students';
 import { describeApiError } from '@/lib/api';
+import { SharedStudentPicker } from '@/components/trainer/shared-student-picker';
+import { StudentCrumbs } from '@/components/trainer/student-crumbs';
 import type { Student } from '@/lib/types';
 
 // Stripe is deliberately absent: those payments are recorded by webhook, and
@@ -52,20 +54,23 @@ export default function StudentBillingPage() {
   const [services, setServices] = useState<ServiceRow[]>([]);
   const [packages, setPackages] = useState<PackageRow[]>([]);
   const [invoices, setInvoices] = useState<InvoiceRow[]>([]);
+  const [roster, setRoster] = useState<Student[]>([]);
   const [error, setError] = useState<string | null>(null);
 
   const refresh = useCallback(async () => {
     try {
-      const [s, svcs, pkgs, invs] = await Promise.all([
+      const [s, svcs, pkgs, invs, all] = await Promise.all([
         studentsApi.get(studentId),
         billingApi.listServices(),
         billingApi.listPackages(studentId),
         billingApi.listInvoices({ student_id: studentId }),
+        studentsApi.list(),
       ]);
       setStudent(s.student);
       setServices(svcs);
       setPackages(pkgs);
       setInvoices(invs);
+      setRoster(all);
     } catch (err) {
       setError(describeApiError(err));
     }
@@ -87,12 +92,7 @@ export default function StudentBillingPage() {
 
   return (
     <div className="mx-auto max-w-5xl space-y-6">
-      <Button asChild variant="ghost" size="sm">
-        <Link href={`/trainer/students/${studentId}`}>
-          <ArrowLeft className="h-4 w-4" />
-          Back to {student.full_name}
-        </Link>
-      </Button>
+      <StudentCrumbs studentId={studentId} current="Billing" />
 
       <div>
         <h1 className="text-3xl font-semibold tracking-tight">
@@ -106,10 +106,17 @@ export default function StudentBillingPage() {
       <NewPackageForm
         services={services}
         studentId={studentId}
+        roster={roster}
         onCreated={refresh}
       />
 
-      <PackagesPanel packages={packages} services={services} onRefresh={refresh} />
+      <PackagesPanel
+        packages={packages}
+        services={services}
+        roster={roster}
+        studentId={studentId}
+        onRefresh={refresh}
+      />
 
       <NewInvoiceForm
         studentId={studentId}
@@ -129,18 +136,27 @@ export default function StudentBillingPage() {
 function NewPackageForm({
   services,
   studentId,
+  roster,
   onCreated,
 }: {
   services: ServiceRow[];
   studentId: string;
+  roster: Student[];
   onCreated: () => void;
 }) {
   const [serviceId, setServiceId] = useState('');
   const [totalSessions, setTotalSessions] = useState('10');
   const [pricePerSession, setPricePerSession] = useState('80');
   const [notes, setNotes] = useState('');
+  const [sharedIds, setSharedIds] = useState<string[]>([]);
   const [submitting, setSubmitting] = useState(false);
   const [open, setOpen] = useState(false);
+
+  function toggleShared(id: string, on: boolean) {
+    setSharedIds((prev) =>
+      on ? (prev.includes(id) ? prev : [...prev, id]) : prev.filter((x) => x !== id),
+    );
+  }
 
   const total =
     Number(totalSessions || 0) * Number(pricePerSession || 0);
@@ -159,10 +175,12 @@ function NewPackageForm({
         total_sessions: Number(totalSessions),
         price_per_session_cents: Math.round(Number(pricePerSession) * 100),
         notes: notes || undefined,
+        shared_student_ids: sharedIds,
       });
       toast.success('Package created');
       setOpen(false);
       setNotes('');
+      setSharedIds([]);
       onCreated();
     } catch (err) {
       toast.error(describeApiError(err));
@@ -246,6 +264,12 @@ function NewPackageForm({
               onChange={(e) => setNotes(e.target.value)}
             />
           </div>
+          <SharedStudentPicker
+            students={roster}
+            ownerId={studentId}
+            selected={sharedIds}
+            onToggle={toggleShared}
+          />
           <div className="flex gap-2">
             <Button type="submit" disabled={submitting}>
               {submitting ? 'Creating…' : 'Create package'}
@@ -267,12 +291,18 @@ function NewPackageForm({
 function PackagesPanel({
   packages,
   services,
+  roster,
+  studentId,
   onRefresh,
 }: {
   packages: PackageRow[];
   services: ServiceRow[];
+  roster: Student[];
+  studentId: string;
   onRefresh: () => void;
 }) {
+  const nameOf = (id: string) =>
+    roster.find((s) => s.id === id)?.full_name ?? '(student)';
   if (packages.length === 0) {
     return (
       <Card>
@@ -339,6 +369,16 @@ function PackagesPanel({
                     </>
                   ) : null}
                 </div>
+                {p.student_id !== studentId ? (
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    Shared from {nameOf(p.student_id)}&apos;s package
+                  </p>
+                ) : (p.shared_student_ids ?? []).length > 0 ? (
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    Shared with{' '}
+                    {(p.shared_student_ids ?? []).map(nameOf).join(', ')}
+                  </p>
+                ) : null}
                 {p.notes ? (
                   <p className="mt-1 text-xs italic text-muted-foreground">
                     {p.notes}

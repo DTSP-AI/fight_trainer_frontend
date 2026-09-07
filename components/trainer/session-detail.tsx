@@ -8,6 +8,7 @@ import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { LoadingState } from '@/components/common/loading-state';
 import { EmptyState } from '@/components/common/empty-state';
+import { StudentCrumbs } from '@/components/trainer/student-crumbs';
 import {
   sessionsApi,
   type SessionDetailWithLibrary,
@@ -68,6 +69,11 @@ export function SessionDetail({ sessionId }: SessionDetailProps) {
 
   return (
     <div className="space-y-6">
+      <StudentCrumbs
+        studentId={session.student_id}
+        section={{ label: 'Sessions', href: '/trainer/sessions' }}
+        current={`Session · ${formatDate(session.session_date)}`}
+      />
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">

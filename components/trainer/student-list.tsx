@@ -53,8 +53,8 @@ export function StudentList() {
     return (
       <EmptyState
         icon={<Users className="h-8 w-8" />}
-        title="No students yet"
-        description="Add your first student to start logging sessions."
+        title="No clients yet"
+        description="Add your first client to start logging sessions."
         action={
           <Button asChild>
             <Link href="/trainer/students/new">

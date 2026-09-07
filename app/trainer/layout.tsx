@@ -14,36 +14,45 @@ import {
   Users,
   Wallet,
 } from 'lucide-react';
-import { AppHeader } from '@/components/common/app-header';
+import { AppShell, type NavGroup } from '@/components/common/app-shell';
 import { RoleGate } from '@/components/common/role-gate';
-import { Sidebar, type SidebarItem } from '@/components/common/sidebar';
 
-const NAV: SidebarItem[] = [
-  { href: '/trainer', label: 'Dashboard', icon: <Activity className="h-4 w-4" /> },
-  { href: '/trainer/students', label: 'Students', icon: <Users className="h-4 w-4" /> },
-  { href: '/trainer/sessions', label: 'Sessions', icon: <Film className="h-4 w-4" /> },
-  { href: '/trainer/billing', label: 'Billing', icon: <Receipt className="h-4 w-4" /> },
-  { href: '/trainer/plans', label: 'Plans', icon: <CalendarDays className="h-4 w-4" /> },
-  { href: '/trainer/library', label: 'Library', icon: <Library className="h-4 w-4" /> },
-  { href: '/trainer/analyze', label: 'Analyzer', icon: <Sparkles className="h-4 w-4" /> },
-  { href: '/trainer/fighters', label: 'Fighter bank', icon: <Trophy className="h-4 w-4" /> },
-  { href: '/trainer/graph', label: 'Graph', icon: <Network className="h-4 w-4" /> },
+const GROUPS: NavGroup[] = [
   {
-    href: '/trainer/inactivity',
-    label: 'Inactivity',
-    icon: <AlertTriangle className="h-4 w-4" />,
+    items: [
+      { href: '/trainer', label: 'Dashboard', icon: <Activity className="h-4 w-4" />, exact: true },
+      { href: '/trainer/students', label: 'Clients', icon: <Users className="h-4 w-4" /> },
+      { href: '/trainer/sessions', label: 'Sessions', icon: <Film className="h-4 w-4" /> },
+      { href: '/trainer/billing', label: 'Billing', icon: <Receipt className="h-4 w-4" /> },
+      { href: '/trainer/plans', label: 'Plans', icon: <CalendarDays className="h-4 w-4" /> },
+    ],
   },
   {
-    href: '/trainer/settings/payments',
-    label: 'Payments',
-    icon: <Wallet className="h-4 w-4" />,
+    title: 'Study',
+    items: [
+      { href: '/trainer/library', label: 'Library', icon: <Library className="h-4 w-4" /> },
+      { href: '/trainer/analyze', label: 'Analyzer', icon: <Sparkles className="h-4 w-4" /> },
+      { href: '/trainer/fighters', label: 'Fighter bank', icon: <Trophy className="h-4 w-4" /> },
+      { href: '/trainer/graph', label: 'Graph', icon: <Network className="h-4 w-4" /> },
+    ],
   },
   {
-    href: '/trainer/settings/integrations',
-    label: 'Integrations',
-    icon: <Plug className="h-4 w-4" />,
+    title: 'Watch',
+    items: [
+      { href: '/trainer/inactivity', label: 'Inactivity', icon: <AlertTriangle className="h-4 w-4" /> },
+    ],
+  },
+  {
+    title: 'Settings',
+    items: [
+      { href: '/trainer/settings/payments', label: 'Payments', icon: <Wallet className="h-4 w-4" /> },
+      { href: '/trainer/settings/integrations', label: 'Integrations', icon: <Plug className="h-4 w-4" /> },
+    ],
   },
 ];
+
+// Mobile bottom bar — the four places a coach goes between sessions.
+const PRIMARY = ['/trainer', '/trainer/students', '/trainer/sessions', '/trainer/billing'];
 
 export default function TrainerLayout({
   children,
@@ -52,13 +61,18 @@ export default function TrainerLayout({
 }) {
   return (
     <RoleGate role="trainer">
-      <div className="flex min-h-screen flex-col bg-background">
-        <AppHeader homeHref="/trainer" subtitle="Coach" />
-        <div className="flex flex-1 flex-col md:flex-row">
-          <Sidebar title="Coach" items={NAV} />
-          <main className="flex-1 overflow-x-auto p-4 md:p-8">{children}</main>
-        </div>
-      </div>
+      <AppShell
+        role="Coach"
+        homeHref="/trainer"
+        groups={GROUPS}
+        primary={PRIMARY}
+        accountLinks={[
+          { href: '/trainer/settings/payments', label: 'Payment settings', icon: <Wallet className="h-4 w-4" /> },
+          { href: '/trainer/settings/integrations', label: 'Integrations', icon: <Plug className="h-4 w-4" /> },
+        ]}
+      >
+        {children}
+      </AppShell>
     </RoleGate>
   );
 }

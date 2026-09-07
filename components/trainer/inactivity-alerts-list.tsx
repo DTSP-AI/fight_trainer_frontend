@@ -49,7 +49,7 @@ export function InactivityAlertsList() {
       <EmptyState
         icon={<CheckCircle2 className="h-8 w-8" />}
         title="No active alerts"
-        description="Quiet is good. Inactive students will surface here as soon as the watcher catches them."
+        description="Quiet is good. Inactive clients will surface here as soon as the watcher catches them."
       />
     );
   }

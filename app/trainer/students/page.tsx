@@ -8,7 +8,7 @@ export default function TrainerStudentsPage() {
     <div className="mx-auto max-w-6xl space-y-6">
       <div className="flex items-end justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-semibold tracking-tight">Students</h1>
+          <h1 className="text-3xl font-semibold tracking-tight">Clients</h1>
           <p className="mt-1 text-sm text-muted-foreground">
             Roster, last-seen, and risk flags.
           </p>
@@ -16,7 +16,7 @@ export default function TrainerStudentsPage() {
         <Button asChild>
           <Link href="/trainer/students/new">
             <Plus className="h-4 w-4" />
-            Add student
+            Add client
           </Link>
         </Button>
       </div>

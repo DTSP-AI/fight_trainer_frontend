@@ -58,6 +58,14 @@ export function ProfileView() {
             <span className="text-foreground">Started: </span>
             {formatDate(me.started_training_at) || '—'}
           </div>
+          <div>
+            <span className="text-foreground">Phone: </span>
+            {me.phone || '—'}
+          </div>
+          <div>
+            <span className="text-foreground">Date of birth: </span>
+            {formatDate(me.date_of_birth) || '—'}
+          </div>
           {me.notes ? (
             <div>
               <span className="text-foreground">Notes: </span>

@@ -121,6 +121,8 @@ export interface PackageRow {
   purchased_at?: string | null;
   expires_at?: string | null;
   notes?: string | null;
+  // Shared package (migration 040): other students allowed to book against it.
+  shared_student_ids?: string[];
 }
 
 export interface PackageCreateRequest {
@@ -132,6 +134,15 @@ export interface PackageCreateRequest {
   expires_at?: string;
   mark_paid_method?: PaymentMethod;
   mark_paid_reference?: string;
+  shared_student_ids?: string[];
+}
+
+export interface PackageUpdateRequest {
+  status?: PackageStatus;
+  notes?: string;
+  expires_at?: string;
+  /** Pass [] to un-share. */
+  shared_student_ids?: string[];
 }
 
 // ============================================================================
@@ -305,6 +316,11 @@ export const billingApi = {
   deletePackage: (packageId: string) =>
     apiClient.delete<{ deleted: boolean; id: string }>(
       `/api/packages/${encodeURIComponent(packageId)}`,
+    ),
+  updatePackage: (packageId: string, payload: PackageUpdateRequest) =>
+    apiClient.patch<PackageRow>(
+      `/api/packages/${encodeURIComponent(packageId)}`,
+      payload,
     ),
   recordManualPayment: (
     packageId: string,

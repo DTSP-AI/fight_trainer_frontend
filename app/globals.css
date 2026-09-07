@@ -81,6 +81,29 @@
     }
   }
 
+  /* Mobile nav drawer: slide from the left; overlay fades. Reduced-motion
+     users get the global 0.01ms override above. */
+  @keyframes nav-drawer-in {
+    from { transform: translateX(-100%); }
+    to { transform: translateX(0); }
+  }
+  @keyframes nav-drawer-out {
+    from { transform: translateX(0); }
+    to { transform: translateX(-100%); }
+  }
+  @keyframes nav-fade-in {
+    from { opacity: 0; }
+    to { opacity: 1; }
+  }
+  @keyframes nav-fade-out {
+    from { opacity: 1; }
+    to { opacity: 0; }
+  }
+  .nav-drawer[data-state='open'] { animation: nav-drawer-in 220ms cubic-bezier(0.32, 0.72, 0, 1); }
+  .nav-drawer[data-state='closed'] { animation: nav-drawer-out 180ms ease-in; }
+  .nav-overlay[data-state='open'] { animation: nav-fade-in 200ms ease-out; }
+  .nav-overlay[data-state='closed'] { animation: nav-fade-out 160ms ease-in; }
+
   /* Min 44x44 touch target law — mobile-first. */
   button,
   [role='button'],

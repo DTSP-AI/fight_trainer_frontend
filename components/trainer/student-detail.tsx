@@ -3,9 +3,10 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { CalendarPlus, Mail, Plus, Receipt, Trash2 } from 'lucide-react';
+import { CalendarPlus, Mail, Pencil, Plus, Receipt, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { LoadingState } from '@/components/common/loading-state';
@@ -14,6 +15,8 @@ import { studentsApi } from '@/lib/api/students';
 import { describeApiError } from '@/lib/api';
 import { formatDate, formatRelative } from '@/lib/utils';
 import { canResendInvite, useResendInvite } from './use-resend-invite';
+import { Breadcrumbs } from '@/components/common/breadcrumbs';
+import { rememberStudentName } from './student-crumbs';
 import type { StudentDetailResponse } from '@/lib/types';
 
 interface StudentDetailProps {
@@ -25,11 +28,32 @@ export function StudentDetail({ studentId }: StudentDetailProps) {
   const [data, setData] = useState<StudentDetailResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
+  const [reloadTick, setReloadTick] = useState(0);
+  const [editingEmail, setEditingEmail] = useState(false);
+  const [emailDraft, setEmailDraft] = useState('');
+  const [savingEmail, setSavingEmail] = useState(false);
   const { resendInvite, resendingId } = useResendInvite();
   const resending = resendingId === studentId;
 
+  async function saveInviteEmail(e: React.FormEvent) {
+    e.preventDefault();
+    const next = emailDraft.trim().toLowerCase();
+    if (!next) return;
+    setSavingEmail(true);
+    try {
+      await studentsApi.update(studentId, { invite_email: next });
+      toast.success('Invite email updated — hit "Resend invite" to send it.');
+      setEditingEmail(false);
+      setReloadTick((t) => t + 1);
+    } catch (err) {
+      toast.error(describeApiError(err));
+    } finally {
+      setSavingEmail(false);
+    }
+  }
+
   async function deleteStudent() {
-    const name = data?.student.full_name ?? 'this student';
+    const name = data?.student.full_name ?? 'this client';
     const confirm1 = window.confirm(
       `Delete ${name}? This will cascade-delete every session, package, ` +
         `invoice, plan, and clip delivery for them. This is irreversible.`,
@@ -59,6 +83,7 @@ export function StudentDetail({ studentId }: StudentDetailProps) {
     studentsApi
       .get(studentId)
       .then((res) => {
+        rememberStudentName(res.student.id, res.student.full_name);
         if (!cancelled) setData(res);
       })
       .catch((err: unknown) => {
@@ -67,7 +92,7 @@ export function StudentDetail({ studentId }: StudentDetailProps) {
     return () => {
       cancelled = true;
     };
-  }, [studentId]);
+  }, [studentId, reloadTick]);
 
   if (error) {
     return (
@@ -82,6 +107,12 @@ export function StudentDetail({ studentId }: StudentDetailProps) {
 
   return (
     <div className="space-y-6">
+      <Breadcrumbs
+        items={[
+          { label: 'Clients', href: '/trainer/students' },
+          { label: student.full_name },
+        ]}
+      />
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">
@@ -113,6 +144,12 @@ export function StudentDetail({ studentId }: StudentDetailProps) {
             </Link>
           </Button>
           <Button asChild variant="outline">
+            <Link href={`/trainer/students/${student.id}/edit`}>
+              <Pencil className="h-4 w-4" />
+              Edit profile
+            </Link>
+          </Button>
+          <Button asChild variant="outline">
             <Link href={`/trainer/billing?student=${student.id}&tab=schedule`}>
               <CalendarPlus className="h-4 w-4" />
               Book session
@@ -137,20 +174,103 @@ export function StudentDetail({ studentId }: StudentDetailProps) {
         </div>
       </div>
 
-      {student.invite_email &&
-      (student.invite_status === 'pending' ||
-        student.invite_status === 'sent') ? (
-        <p className="rounded-md border border-amber-500/40 bg-amber-500/10 p-3 text-sm">
-          <strong>
-            {student.invite_status === 'sent'
-              ? 'Invite sent — awaiting accept'
-              : 'Invite pending'}
-          </strong>{' '}
-          — emailed{' '}
-          <span className="font-mono">{student.invite_email}</span>. If they
-          didn't get it, hit "Resend invite" above.
-        </p>
+      {student.invite_status !== 'accepted' ? (
+        <div className="space-y-2 rounded-md border border-amber-500/40 bg-amber-500/10 p-3 text-sm">
+          {student.invite_email ? (
+            <p>
+              <strong>
+                {student.invite_status === 'sent'
+                  ? 'Invite sent — awaiting accept'
+                  : 'Invite pending'}
+              </strong>{' '}
+              — emailed{' '}
+              <span className="font-mono">{student.invite_email}</span>. If they
+              didn&apos;t get it, hit &quot;Resend invite&quot; above.
+            </p>
+          ) : (
+            <p>
+              <strong>No invite email on file</strong> — add one so this
+              student can sign in and claim their account.
+            </p>
+          )}
+          {editingEmail ? (
+            <form onSubmit={saveInviteEmail} className="flex flex-wrap items-center gap-2">
+              <Input
+                type="email"
+                required
+                autoFocus
+                value={emailDraft}
+                onChange={(e) => setEmailDraft(e.target.value)}
+                placeholder="student@example.com"
+                className="h-9 max-w-xs"
+              />
+              <Button type="submit" size="sm" disabled={savingEmail}>
+                {savingEmail ? 'Saving…' : 'Save email'}
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                variant="ghost"
+                onClick={() => setEditingEmail(false)}
+              >
+                Cancel
+              </Button>
+            </form>
+          ) : (
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              onClick={() => {
+                setEmailDraft(student.invite_email ?? '');
+                setEditingEmail(true);
+              }}
+            >
+              {student.invite_email ? 'Change email' : 'Add invite email'}
+            </Button>
+          )}
+        </div>
       ) : null}
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-lg">Profile</CardTitle>
+        </CardHeader>
+        <CardContent className="grid gap-x-8 gap-y-3 text-sm sm:grid-cols-2">
+          <div>
+            <div className="text-muted-foreground">Phone</div>
+            {student.phone ? (
+              <a href={`tel:${student.phone}`} className="hover:underline">
+                {student.phone}
+              </a>
+            ) : (
+              <span className="text-muted-foreground/70">Not on file</span>
+            )}
+          </div>
+          <div>
+            <div className="text-muted-foreground">Date of birth</div>
+            {student.date_of_birth ? (
+              formatDate(student.date_of_birth)
+            ) : (
+              <span className="text-muted-foreground/70">Not on file</span>
+            )}
+          </div>
+          <div>
+            <div className="text-muted-foreground">Sign-in email</div>
+            {student.invite_email ? (
+              <span className="font-mono text-xs">{student.invite_email}</span>
+            ) : (
+              <span className="text-muted-foreground/70">Not on file</span>
+            )}
+          </div>
+          <div>
+            <div className="text-muted-foreground">Training since</div>
+            {formatDate(student.started_training_at) || (
+              <span className="text-muted-foreground/70">Not on file</span>
+            )}
+          </div>
+        </CardContent>
+      </Card>
 
       {student.notes ? (
         <Card>
@@ -253,7 +373,7 @@ export function StudentDetail({ studentId }: StudentDetailProps) {
             className="border-rose-500/40 text-rose-300 hover:bg-rose-500/10 hover:text-rose-200"
           >
             <Trash2 className="h-4 w-4" />
-            {deleting ? 'Deleting…' : 'Delete student'}
+            {deleting ? 'Deleting…' : 'Delete client'}
           </Button>
         </CardContent>
       </Card>

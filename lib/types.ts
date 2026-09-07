@@ -95,6 +95,9 @@ export interface Student {
   notes?: string | null;
   invite_email?: string | null;
   invite_status?: 'pending' | 'sent' | 'accepted' | 'n/a' | null;
+  /** E.164 when parseable (migration 041). */
+  phone?: string | null;
+  date_of_birth?: string | null;
   created_at?: string;
 }
 
@@ -105,6 +108,8 @@ export interface StudentCreateRequest {
   started_training_at?: string | null;
   notes?: string | null;
   invite_email?: string | null;
+  phone?: string | null;
+  date_of_birth?: string | null;
 }
 
 export interface InviteDelivery {
@@ -127,9 +132,14 @@ export interface ResendInviteResponse {
 export interface StudentUpdateRequest {
   full_name?: string;
   primary_sport?: Sport;
-  skill_level?: SkillLevel;
+  /** null clears the belt (e.g. switching a BJJ client to boxing). */
+  skill_level?: SkillLevel | null;
   started_training_at?: string | null;
   notes?: string | null;
+  /** Only while the invite is outstanding; 409 once accepted. */
+  invite_email?: string;
+  phone?: string | null;
+  date_of_birth?: string | null;
 }
 
 // ---------- Sessions ----------

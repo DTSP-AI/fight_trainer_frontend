@@ -8,6 +8,7 @@ import {
   useRef,
   useState,
 } from 'react';
+import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import {
   AlertTriangle,
@@ -44,6 +45,8 @@ import {
 } from '@/lib/api/billing';
 import { calendarApi, type CalendarEvent } from '@/lib/api/calendar';
 import { studentsApi } from '@/lib/api/students';
+import { SharedStudentPicker } from '@/components/trainer/shared-student-picker';
+import { StudentCrumbs } from '@/components/trainer/student-crumbs';
 import { describeApiError } from '@/lib/api';
 import { cn } from '@/lib/utils';
 import type { Student } from '@/lib/types';
@@ -231,6 +234,13 @@ function BillingHubContent() {
 
   return (
     <div className="mx-auto max-w-6xl space-y-8">
+      {preselectStudentId ? (
+        <StudentCrumbs
+          studentId={preselectStudentId}
+          section={{ label: 'Billing', href: '/trainer/billing' }}
+          current={wantsSchedule ? 'Book session' : 'Packages'}
+        />
+      ) : null}
       <div>
         <h1 className="text-3xl font-semibold tracking-tight">Billing</h1>
         <p className="mt-1 text-sm text-muted-foreground">
@@ -978,6 +988,9 @@ function PackagesPanel({
                 p={p}
                 student={studentMap.get(p.student_id)}
                 service={serviceMap.get(p.service_id)}
+                sharedWith={(p.shared_student_ids ?? [])
+                  .map((id) => studentMap.get(id))
+                  .filter((s): s is Student => Boolean(s))}
                 onChanged={onChanged}
               />
             ))}
@@ -1009,11 +1022,13 @@ function PackageRowItem({
   p,
   student,
   service,
+  sharedWith = [],
   onChanged,
 }: {
   p: PackageRow;
   student?: Student;
   service?: ServiceRow;
+  sharedWith?: Student[];
   onChanged: () => void;
 }) {
   const [busy, setBusy] = useState(false);
@@ -1074,8 +1089,17 @@ function PackageRowItem({
     >
       <div className="min-w-0 flex-1">
         <div className="flex flex-wrap items-center gap-2 text-sm font-semibold">
-          {student?.full_name ?? '(unknown student)'} ·{' '}
-          {service?.name ?? '(deleted service)'}
+          {student ? (
+            <Link
+              href={`/trainer/students/${student.id}`}
+              className="hover:underline"
+            >
+              {student.full_name}
+            </Link>
+          ) : (
+            '(unknown student)'
+          )}{' '}
+          · {service?.name ?? '(deleted service)'}
           {lowBalance ? (
             <Badge variant="default" className="bg-violet-500/30 text-violet-100">
               Re-up time
@@ -1086,6 +1110,11 @@ function PackageRowItem({
           {remaining}/{total} left · {fmtCents(p.price_per_session_cents)}/session
           · {fmtCents(p.total_price_cents)} total
         </div>
+        {sharedWith.length > 0 ? (
+          <div className="mt-0.5 text-xs text-muted-foreground">
+            Shared with {sharedWith.map((s) => s.full_name).join(', ')}
+          </div>
+        ) : null}
         {p.notes ? (
           <div className="mt-1 text-xs italic text-muted-foreground">
             {p.notes}
@@ -1136,7 +1165,14 @@ function NewPackageForm({
   const [totalSessions, setTotalSessions] = useState('10');
   const [price, setPrice] = useState('80');
   const [markPaid, setMarkPaid] = useState(false);
+  const [sharedIds, setSharedIds] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
+
+  function toggleShared(id: string, on: boolean) {
+    setSharedIds((prev) =>
+      on ? (prev.includes(id) ? prev : [...prev, id]) : prev.filter((x) => x !== id),
+    );
+  }
 
   // Default price from service when picked.
   function pickService(id: string) {
@@ -1155,6 +1191,7 @@ function NewPackageForm({
         total_sessions: Number(totalSessions),
         price_per_session_cents: Math.round(Number(price) * 100),
         mark_paid_method: markPaid ? 'cash' : undefined,
+        shared_student_ids: sharedIds.filter((id) => id !== studentId),
       });
       toast.success('Package created');
       onCreated();
@@ -1238,6 +1275,12 @@ function NewPackageForm({
         />
         Mark paid in full now (cash)
       </label>
+      <SharedStudentPicker
+        students={students}
+        ownerId={studentId}
+        selected={sharedIds}
+        onToggle={toggleShared}
+      />
       <div className="flex gap-2">
         <Button type="submit" disabled={busy}>
           {busy ? 'Saving…' : 'Create package'}
@@ -1297,7 +1340,8 @@ function ScheduleNewForm({
     () =>
       packages.filter(
         (p) =>
-          p.student_id === studentId &&
+          (p.student_id === studentId ||
+            (p.shared_student_ids ?? []).includes(studentId)) &&
           p.status === 'active' &&
           p.sessions_remaining > 0,
       ),
@@ -1556,7 +1600,16 @@ function SessionRow({
     <div className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-border bg-background/40 p-3">
       <div className="min-w-0 flex-1">
         <div className="text-sm font-semibold">
-          {student?.full_name ?? '(unknown student)'}
+          {student ? (
+            <Link
+              href={`/trainer/students/${student.id}`}
+              className="hover:underline"
+            >
+              {student.full_name}
+            </Link>
+          ) : (
+            '(unknown student)'
+          )}
         </div>
         <div className="mt-0.5 text-xs text-muted-foreground">
           {fmtWhen(s.scheduled_for)} · {s.duration_minutes}m ·{' '}
