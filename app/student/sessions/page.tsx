@@ -130,6 +130,11 @@ export default function StudentSessionsPage() {
                   </span>{' '}
                   / {p.total_sessions} left ·{' '}
                   {fmtCents(p.price_per_session_cents)}/session
+                  {p.student_id !== me.id ? (
+                    <span className="ml-2 text-xs text-muted-foreground">
+                      · shared package
+                    </span>
+                  ) : null}
                 </div>
                 <Badge
                   variant={p.payment_status === 'paid' ? 'default' : 'secondary'}
