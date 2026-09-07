@@ -130,6 +130,8 @@ export interface StudentUpdateRequest {
   skill_level?: SkillLevel;
   started_training_at?: string | null;
   notes?: string | null;
+  /** Only while the invite is outstanding; 409 once accepted. */
+  invite_email?: string;
 }
 
 // ---------- Sessions ----------

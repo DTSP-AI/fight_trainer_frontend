@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation';
 import { CalendarPlus, Mail, Plus, Receipt, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { LoadingState } from '@/components/common/loading-state';
@@ -25,8 +26,29 @@ export function StudentDetail({ studentId }: StudentDetailProps) {
   const [data, setData] = useState<StudentDetailResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
+  const [reloadTick, setReloadTick] = useState(0);
+  const [editingEmail, setEditingEmail] = useState(false);
+  const [emailDraft, setEmailDraft] = useState('');
+  const [savingEmail, setSavingEmail] = useState(false);
   const { resendInvite, resendingId } = useResendInvite();
   const resending = resendingId === studentId;
+
+  async function saveInviteEmail(e: React.FormEvent) {
+    e.preventDefault();
+    const next = emailDraft.trim().toLowerCase();
+    if (!next) return;
+    setSavingEmail(true);
+    try {
+      await studentsApi.update(studentId, { invite_email: next });
+      toast.success('Invite email updated — hit "Resend invite" to send it.');
+      setEditingEmail(false);
+      setReloadTick((t) => t + 1);
+    } catch (err) {
+      toast.error(describeApiError(err));
+    } finally {
+      setSavingEmail(false);
+    }
+  }
 
   async function deleteStudent() {
     const name = data?.student.full_name ?? 'this student';
@@ -67,7 +89,7 @@ export function StudentDetail({ studentId }: StudentDetailProps) {
     return () => {
       cancelled = true;
     };
-  }, [studentId]);
+  }, [studentId, reloadTick]);
 
   if (error) {
     return (
@@ -137,19 +159,62 @@ export function StudentDetail({ studentId }: StudentDetailProps) {
         </div>
       </div>
 
-      {student.invite_email &&
-      (student.invite_status === 'pending' ||
-        student.invite_status === 'sent') ? (
-        <p className="rounded-md border border-amber-500/40 bg-amber-500/10 p-3 text-sm">
-          <strong>
-            {student.invite_status === 'sent'
-              ? 'Invite sent — awaiting accept'
-              : 'Invite pending'}
-          </strong>{' '}
-          — emailed{' '}
-          <span className="font-mono">{student.invite_email}</span>. If they
-          didn't get it, hit "Resend invite" above.
-        </p>
+      {student.invite_status !== 'accepted' ? (
+        <div className="space-y-2 rounded-md border border-amber-500/40 bg-amber-500/10 p-3 text-sm">
+          {student.invite_email ? (
+            <p>
+              <strong>
+                {student.invite_status === 'sent'
+                  ? 'Invite sent — awaiting accept'
+                  : 'Invite pending'}
+              </strong>{' '}
+              — emailed{' '}
+              <span className="font-mono">{student.invite_email}</span>. If they
+              didn&apos;t get it, hit &quot;Resend invite&quot; above.
+            </p>
+          ) : (
+            <p>
+              <strong>No invite email on file</strong> — add one so this
+              student can sign in and claim their account.
+            </p>
+          )}
+          {editingEmail ? (
+            <form onSubmit={saveInviteEmail} className="flex flex-wrap items-center gap-2">
+              <Input
+                type="email"
+                required
+                autoFocus
+                value={emailDraft}
+                onChange={(e) => setEmailDraft(e.target.value)}
+                placeholder="student@example.com"
+                className="h-9 max-w-xs"
+              />
+              <Button type="submit" size="sm" disabled={savingEmail}>
+                {savingEmail ? 'Saving…' : 'Save email'}
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                variant="ghost"
+                onClick={() => setEditingEmail(false)}
+              >
+                Cancel
+              </Button>
+            </form>
+          ) : (
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              onClick={() => {
+                setEmailDraft(student.invite_email ?? '');
+                setEditingEmail(true);
+              }}
+            >
+              {student.invite_email ? 'Change email' : 'Add invite email'}
+            </Button>
+          )}
+        </div>
       ) : null}
 
       {student.notes ? (
