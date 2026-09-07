@@ -53,7 +53,7 @@ export function StudentDetail({ studentId }: StudentDetailProps) {
   }
 
   async function deleteStudent() {
-    const name = data?.student.full_name ?? 'this student';
+    const name = data?.student.full_name ?? 'this client';
     const confirm1 = window.confirm(
       `Delete ${name}? This will cascade-delete every session, package, ` +
         `invoice, plan, and clip delivery for them. This is irreversible.`,
@@ -109,7 +109,7 @@ export function StudentDetail({ studentId }: StudentDetailProps) {
     <div className="space-y-6">
       <Breadcrumbs
         items={[
-          { label: 'Students', href: '/trainer/students' },
+          { label: 'Clients', href: '/trainer/students' },
           { label: student.full_name },
         ]}
       />
@@ -232,6 +232,46 @@ export function StudentDetail({ studentId }: StudentDetailProps) {
         </div>
       ) : null}
 
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-lg">Profile</CardTitle>
+        </CardHeader>
+        <CardContent className="grid gap-x-8 gap-y-3 text-sm sm:grid-cols-2">
+          <div>
+            <div className="text-muted-foreground">Phone</div>
+            {student.phone ? (
+              <a href={`tel:${student.phone}`} className="hover:underline">
+                {student.phone}
+              </a>
+            ) : (
+              <span className="text-muted-foreground/70">Not on file</span>
+            )}
+          </div>
+          <div>
+            <div className="text-muted-foreground">Date of birth</div>
+            {student.date_of_birth ? (
+              formatDate(student.date_of_birth)
+            ) : (
+              <span className="text-muted-foreground/70">Not on file</span>
+            )}
+          </div>
+          <div>
+            <div className="text-muted-foreground">Sign-in email</div>
+            {student.invite_email ? (
+              <span className="font-mono text-xs">{student.invite_email}</span>
+            ) : (
+              <span className="text-muted-foreground/70">Not on file</span>
+            )}
+          </div>
+          <div>
+            <div className="text-muted-foreground">Training since</div>
+            {formatDate(student.started_training_at) || (
+              <span className="text-muted-foreground/70">Not on file</span>
+            )}
+          </div>
+        </CardContent>
+      </Card>
+
       {student.notes ? (
         <Card>
           <CardContent className="p-5 text-sm leading-relaxed text-muted-foreground">
@@ -333,7 +373,7 @@ export function StudentDetail({ studentId }: StudentDetailProps) {
             className="border-rose-500/40 text-rose-300 hover:bg-rose-500/10 hover:text-rose-200"
           >
             <Trash2 className="h-4 w-4" />
-            {deleting ? 'Deleting…' : 'Delete student'}
+            {deleting ? 'Deleting…' : 'Delete client'}
           </Button>
         </CardContent>
       </Card>

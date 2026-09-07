@@ -63,6 +63,8 @@ const schema = z.object({
     .optional(),
   started_training_at: z.string().optional().or(z.literal('')),
   invite_email: z.string().email('Invalid email').optional().or(z.literal('')),
+  phone: z.string().optional().or(z.literal('')),
+  date_of_birth: z.string().optional().or(z.literal('')),
   notes: z.string().optional(),
 });
 
@@ -94,6 +96,8 @@ export function StudentForm({ initial }: { initial?: Student } = {}) {
           skill_level: initial.skill_level ?? undefined,
           started_training_at: initial.started_training_at ?? '',
           invite_email: '',
+          phone: initial.phone ?? '',
+          date_of_birth: initial.date_of_birth ?? '',
           notes: initial.notes ?? '',
         }
       : {
@@ -102,6 +106,8 @@ export function StudentForm({ initial }: { initial?: Student } = {}) {
           skill_level: 'white',
           started_training_at: '',
           invite_email: '',
+          phone: '',
+          date_of_birth: '',
           notes: '',
         },
   });
@@ -112,7 +118,7 @@ export function StudentForm({ initial }: { initial?: Student } = {}) {
 
   async function onSubmit(values: FormValues) {
     if (isBjj && !values.skill_level) {
-      toast.error('BJJ students need a belt rank.');
+      toast.error('BJJ clients need a belt rank.');
       return;
     }
     setSubmitting(true);
@@ -121,9 +127,12 @@ export function StudentForm({ initial }: { initial?: Student } = {}) {
         await studentsApi.update(initial.id, {
           full_name: values.full_name,
           primary_sport: values.primary_sport,
-          skill_level: isBjj ? values.skill_level : undefined,
+          // null clears a stale belt when moving off BJJ.
+          skill_level: isBjj ? (values.skill_level ?? null) : null,
           started_training_at: values.started_training_at || null,
-          notes: values.notes ?? null,
+          phone: values.phone || null,
+          date_of_birth: values.date_of_birth || null,
+          notes: values.notes || null,
         });
         toast.success('Profile saved.');
         router.push(`/trainer/students/${initial.id}`);
@@ -143,6 +152,8 @@ export function StudentForm({ initial }: { initial?: Student } = {}) {
         skill_level: isBjj ? (values.skill_level ?? null) : null,
         started_training_at: values.started_training_at || null,
         invite_email: values.invite_email || null,
+        phone: values.phone || null,
+        date_of_birth: values.date_of_birth || null,
         notes: values.notes || null,
       });
       toast.success(`Added ${result.full_name}.`);
@@ -260,12 +271,29 @@ export function StudentForm({ initial }: { initial?: Student } = {}) {
         )}
       </div>
 
+      <div className="grid gap-4 md:grid-cols-2">
+        <div className="grid gap-2">
+          <Label htmlFor="phone">Phone</Label>
+          <Input
+            id="phone"
+            type="tel"
+            autoComplete="off"
+            placeholder="(212) 555-0091"
+            {...register('phone')}
+          />
+        </div>
+        <div className="grid gap-2">
+          <Label htmlFor="date_of_birth">Date of birth</Label>
+          <Input id="date_of_birth" type="date" {...register('date_of_birth')} />
+        </div>
+      </div>
+
       <div className="grid gap-2">
         <Label htmlFor="notes">Notes</Label>
         <AssistedTextarea
           id="notes"
           rows={4}
-          placeholder="Competition prep, injuries, anything that should travel with the student record."
+          placeholder="Competition prep, injuries, anything that should travel with the client record."
           value={watch('notes') ?? ''}
           onChange={(v) => setValue('notes', v, { shouldDirty: true })}
           assistKind="student_notes"
@@ -274,7 +302,7 @@ export function StudentForm({ initial }: { initial?: Student } = {}) {
 
       <div className="flex items-center gap-2">
         <Button type="submit" disabled={submitting}>
-          {submitting ? 'Saving…' : isEdit ? 'Save changes' : 'Add student'}
+          {submitting ? 'Saving…' : isEdit ? 'Save changes' : 'Add client'}
         </Button>
         <Button
           type="button"
@@ -375,7 +403,7 @@ function InviteSentPanel({
       </div>
 
       <div className="flex gap-2">
-        <Button onClick={onDone}>Done — open student profile</Button>
+        <Button onClick={onDone}>Done, open client profile</Button>
       </div>
     </div>
   );
