@@ -8,8 +8,10 @@ import {
   ChevronLeft,
   ChevronRight,
   CircleSlash,
+  CreditCard,
   Dumbbell,
   Pencil,
+  ThumbsDown,
   Trash2,
   X,
 } from 'lucide-react';
@@ -26,22 +28,40 @@ import {
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import { AssistedTextarea } from '@/components/common/assisted-textarea';
+import { ScheduleLegend } from '@/components/common/schedule-legend';
 import { cn } from '@/lib/utils';
 import {
   billingApi,
   type PackageRow,
   type ScheduleStatus,
-  type ServiceRow,
 } from '@/lib/api/billing';
-import type {
-  CalendarEvent,
-  PlannedEvent,
-  ScheduledEvent,
+import {
+  bookingApi,
+  type ApproveBody,
+  type AvailableSlot,
+  type CalendarEvent,
+  type MarkPaidMethod,
+  type PlannedEvent,
+  type ScheduledEvent,
 } from '@/lib/api/calendar';
 import { plansApi } from '@/lib/api/plans';
 import { sessionsApi } from '@/lib/api/sessions';
-import { describeApiError } from '@/lib/api';
+import { ApiClientError, describeApiError } from '@/lib/api';
+import {
+  STATUS_LABEL,
+  TONES,
+  eventTone,
+  type ScheduleTone,
+} from '@/lib/schedule-tones';
 import type { Student } from '@/lib/types';
 
 // ============================================================================
@@ -127,30 +147,33 @@ function fmtCents(c: number): string {
 // Visual tokens
 // ============================================================================
 
-const SCHEDULED_TONES: Record<ScheduleStatus, string> = {
-  scheduled:
-    'border-sky-500/50 bg-sky-500/15 text-sky-100 hover:bg-sky-500/25',
-  confirmed:
-    'border-blue-500/50 bg-blue-500/15 text-blue-100 hover:bg-blue-500/25',
-  completed:
-    'border-emerald-500/50 bg-emerald-500/15 text-emerald-100 hover:bg-emerald-500/25',
-  no_show:
-    'border-amber-500/50 bg-amber-500/15 text-amber-100 hover:bg-amber-500/25',
-  cancelled:
-    'border-rose-500/50 bg-rose-500/15 text-rose-200 line-through hover:bg-rose-500/25',
-};
-
-const PLAN_TONE_OPEN =
-  'border border-dashed border-violet-400/60 bg-violet-500/10 text-violet-100 hover:bg-violet-500/20';
-const PLAN_TONE_DONE =
-  'border border-dashed border-emerald-400/60 bg-emerald-500/10 text-emerald-100';
+// Colour tokens live in lib/schedule-tones.ts — shared with the client
+// calendar so the two roles read the same board.
 
 function eventClass(ev: CalendarEvent): string {
-  if (ev.kind === 'planned') {
-    return ev.fulfilled_session_id ? PLAN_TONE_DONE : PLAN_TONE_OPEN;
-  }
-  return SCHEDULED_TONES[ev.status ?? 'scheduled'];
+  return TONES[eventTone(ev)];
 }
+
+const TRAINER_LEGEND: ScheduleTone[] = [
+  'available',
+  'pending_approval',
+  'awaiting_payment',
+  'scheduled',
+  'completed',
+  'no_show',
+  'cancelled',
+  'planned',
+];
+
+const STUDENT_LEGEND: ScheduleTone[] = TRAINER_LEGEND;
+
+/** Only the fields this calendar reads off a service row. */
+interface ServiceLite {
+  id: string;
+  name: string;
+}
+
+const MARK_PAID_METHODS: MarkPaidMethod[] = ['cash', 'venmo', 'zelle', 'other'];
 
 function eventLabel(ev: CalendarEvent, student?: Student): string {
   const name = student?.full_name ?? '(unknown)';
@@ -167,12 +190,19 @@ function eventLabel(ev: CalendarEvent, student?: Student): string {
 interface Props {
   events: CalendarEvent[];
   studentMap: Map<string, Student>;
-  serviceMap: Map<string, ServiceRow>;
+  serviceMap: Map<string, ServiceLite>;
   packageMap: Map<string, PackageRow>;
   onChanged: () => void;
   /** Called when a day cell is clicked — host should open its schedule
    *  form pre-filled with the picked datetime (default 12:00 PM local). */
   onPickDay?: (datetime: string) => void;
+  /** Open coach availability, rendered as dashed emerald chips. */
+  availableSlots?: AvailableSlot[];
+  /** 'student' hides every coach action and shows the client-side ones. */
+  mode?: 'trainer' | 'student';
+  onPickSlot?: (slot: AvailableSlot) => void;
+  onPay?: (ev: ScheduledEvent) => void;
+  onCancelRequest?: (ev: ScheduledEvent) => void;
 }
 
 export function SessionsCalendar({
@@ -182,12 +212,34 @@ export function SessionsCalendar({
   packageMap,
   onChanged,
   onPickDay,
+  availableSlots,
+  mode = 'trainer',
+  onPickSlot,
+  onPay,
+  onCancelRequest,
 }: Props) {
   const today = useMemo(() => new Date(), []);
   const [cursor, setCursor] = useState<Date>(() => startOfMonth(today));
   const [selected, setSelected] = useState<CalendarEvent | null>(null);
 
   const grid = useMemo(() => buildMonthGrid(cursor), [cursor]);
+
+  const slotsByDate = useMemo(() => {
+    const m = new Map<string, AvailableSlot[]>();
+    for (const slot of availableSlots ?? []) {
+      const key = localDateKey(new Date(slot.starts_at));
+      const arr = m.get(key) ?? [];
+      arr.push(slot);
+      m.set(key, arr);
+    }
+    for (const arr of m.values()) {
+      arr.sort(
+        (a, b) =>
+          new Date(a.starts_at).getTime() - new Date(b.starts_at).getTime(),
+      );
+    }
+    return m;
+  }, [availableSlots]);
 
   const byDate = useMemo(() => {
     const m = new Map<string, CalendarEvent[]>();
@@ -249,7 +301,9 @@ export function SessionsCalendar({
         <h3 className="text-lg font-semibold tracking-tight">
           {MONTH_NAMES[cursor.getMonth()]} {cursor.getFullYear()}
         </h3>
-        <Legend />
+        <ScheduleLegend
+          items={mode === 'student' ? STUDENT_LEGEND : TRAINER_LEGEND}
+        />
       </div>
 
       <div className="grid grid-cols-7 gap-1 text-center text-xs font-medium uppercase tracking-wider text-muted-foreground">
@@ -266,6 +320,9 @@ export function SessionsCalendar({
           const eventsToday = byDate.get(key) ?? [];
           const visible = eventsToday.slice(0, 3);
           const overflow = eventsToday.length - visible.length;
+          const slotsToday = slotsByDate.get(key) ?? [];
+          const visibleSlots = slotsToday.slice(0, 3);
+          const slotOverflow = slotsToday.length - visibleSlots.length;
 
           return (
             <div
@@ -321,6 +378,31 @@ export function SessionsCalendar({
                     +{overflow} more
                   </div>
                 ) : null}
+                {visibleSlots.map((slot) => (
+                  <button
+                    key={`slot-${slot.starts_at}`}
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onPickSlot?.(slot);
+                    }}
+                    className={cn(
+                      'flex w-full items-center gap-1 truncate rounded-sm px-1.5 py-0.5 text-left text-[11px]',
+                      TONES.available,
+                      !onPickSlot && 'cursor-default',
+                    )}
+                    title={`${fmtTime(slot.starts_at)} available`}
+                  >
+                    <span className="truncate">
+                      {fmtTime(slot.starts_at)} Available
+                    </span>
+                  </button>
+                ))}
+                {slotOverflow > 0 ? (
+                  <div className="text-[10px] text-emerald-200/70">
+                    +{slotOverflow} more open
+                  </div>
+                ) : null}
               </div>
             </div>
           );
@@ -340,11 +422,14 @@ export function SessionsCalendar({
             ? packageMap.get(selected.package_id)
             : undefined
         }
+        mode={mode}
         onClose={() => setSelected(null)}
         onChanged={() => {
           setSelected(null);
           onChanged();
         }}
+        onPay={onPay}
+        onCancelRequest={onCancelRequest}
       />
     </div>
   );
@@ -354,36 +439,179 @@ export function SessionsCalendar({
 // Event detail dialog — different actions for scheduled vs planned
 // ============================================================================
 
+type Panel =
+  | 'none'
+  | 'approve'
+  | 'decline'
+  | 'markPaidApprove'
+  | 'markPaidSettle';
+
+/** One line summarising where the money stands on a scheduled session. */
+function paymentLine(s: ScheduledEvent): string | null {
+  if (s.payment_waived_at) return 'Payment waived';
+  if (s.paid_at) return `Paid · ${fmtWhenFull(s.paid_at)}`;
+  if (s.package_id) return 'Package credit';
+  if (s.status === 'awaiting_payment') return 'Awaiting payment';
+  if (s.price_cents === 0) return 'No charge';
+  return null;
+}
+
+/** Plain-language "what happens next" for the client-side dialog. */
+function studentNextStep(s: ScheduledEvent): string {
+  switch (s.status) {
+    case 'pending_approval':
+      return 'Requested. Your coach still has to approve it — nothing is locked in yet.';
+    case 'awaiting_payment':
+      return 'Your coach approved it. Settle the payment and the spot is locked in.';
+    case 'scheduled':
+    case 'confirmed':
+      return "You're locked in. See you on the mats.";
+    case 'declined':
+      return 'Your coach declined this request. Pick another open spot.';
+    case 'cancelled':
+      return 'This session was cancelled.';
+    case 'no_show':
+      return 'Marked as a no-show.';
+    case 'completed':
+      return 'Logged.';
+    default:
+      return '';
+  }
+}
+
 function EventDetailDialog({
   event,
   student,
   service,
   pkg,
+  mode = 'trainer',
   onClose,
   onChanged,
+  onPay,
+  onCancelRequest,
 }: {
   event: CalendarEvent | null;
   student?: Student;
-  service?: ServiceRow;
+  service?: ServiceLite;
   pkg?: PackageRow;
+  mode?: 'trainer' | 'student';
   onClose: () => void;
   onChanged: () => void;
+  onPay?: (ev: ScheduledEvent) => void;
+  onCancelRequest?: (ev: ScheduledEvent) => void;
 }) {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
   const [editing, setEditing] = useState(false);
+  const [panel, setPanel] = useState<Panel>('none');
+  const [method, setMethod] = useState<MarkPaidMethod>('cash');
+  const [payNotes, setPayNotes] = useState('');
+  const [declineReason, setDeclineReason] = useState('');
+  const [packageExhausted, setPackageExhausted] = useState(false);
 
   if (!event) return null;
 
+  const isTrainer = mode !== 'student';
   const scheduled = event.kind === 'scheduled' ? (event as ScheduledEvent) : null;
   const planned = event.kind === 'planned' ? (event as PlannedEvent) : null;
+  const status = scheduled?.status ?? null;
+  const isPending = status === 'pending_approval';
+  const isAwaitingPayment = status === 'awaiting_payment';
+  const inBookingFlow = isPending || isAwaitingPayment || status === 'declined';
 
-  async function setStatus(status: ScheduleStatus, label: string) {
+  function resetPanels() {
+    setPanel('none');
+    setDeclineReason('');
+    setPayNotes('');
+    setPackageExhausted(false);
+  }
+
+  async function setStatus(next: ScheduleStatus, label: string) {
     if (!scheduled) return;
     setBusy(true);
     try {
-      await billingApi.updateSchedule(scheduled.id, { status });
+      await billingApi.updateSchedule(scheduled.id, { status: next });
       toast.success(label);
+      onChanged();
+    } catch (err) {
+      toast.error(describeApiError(err));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function approve(body: ApproveBody) {
+    if (!scheduled) return;
+    setBusy(true);
+    try {
+      const res = await bookingApi.approve(scheduled.id, body);
+      if (res.checkout_url) {
+        toast.success('Approved — awaiting payment', {
+          description: 'The client got a pay link. It locks in once paid.',
+        });
+      } else {
+        toast.success("Approved — locked in");
+      }
+      resetPanels();
+      onChanged();
+    } catch (err) {
+      if (err instanceof ApiClientError && err.code === 'PACKAGE_EXHAUSTED') {
+        setPackageExhausted(true);
+        setPanel('approve');
+        toast.error('That package is out of credits.', {
+          description: 'Approve as a drop-in, or sell a new package first.',
+        });
+      } else {
+        toast.error(describeApiError(err));
+      }
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function decline() {
+    if (!scheduled) return;
+    setBusy(true);
+    try {
+      await bookingApi.decline(
+        scheduled.id,
+        declineReason.trim() ? { reason: declineReason.trim() } : {},
+      );
+      toast.success('Request declined');
+      resetPanels();
+      onChanged();
+    } catch (err) {
+      toast.error(describeApiError(err));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function waivePayment() {
+    if (!scheduled) return;
+    setBusy(true);
+    try {
+      await bookingApi.waivePayment(scheduled.id);
+      toast.success('Payment waived — locked in');
+      resetPanels();
+      onChanged();
+    } catch (err) {
+      toast.error(describeApiError(err));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function markPaid() {
+    if (!scheduled) return;
+    setBusy(true);
+    try {
+      await bookingApi.markPaid(scheduled.id, {
+        method,
+        ...(payNotes.trim() ? { notes: payNotes.trim() } : {}),
+      });
+      toast.success('Payment recorded — locked in');
+      resetPanels();
       onChanged();
     } catch (err) {
       toast.error(describeApiError(err));
@@ -476,6 +704,12 @@ function EventDetailDialog({
   const isOpenScheduled =
     scheduled && (scheduled.status === 'scheduled' || scheduled.status === 'confirmed');
   const planAlreadyDone = planned && planned.fulfilled_session_id;
+  const payLine = scheduled ? paymentLine(scheduled) : null;
+  const showEverydayActions =
+    isTrainer &&
+    !inBookingFlow &&
+    !event.fulfilled_session_id &&
+    !planAlreadyDone;
 
   return (
     <Dialog
@@ -483,6 +717,7 @@ function EventDetailDialog({
       onOpenChange={(o) => {
         if (!o) {
           setEditing(false);
+          resetPanels();
           onClose();
         }
       }}
@@ -515,8 +750,8 @@ function EventDetailDialog({
           <div className="flex flex-wrap items-center gap-2">
             {scheduled ? (
               <>
-                <Badge variant="secondary" className="capitalize">
-                  {(scheduled.status ?? 'scheduled').replace('_', ' ')}
+                <Badge variant="secondary">
+                  {STATUS_LABEL[eventTone(scheduled)]}
                 </Badge>
                 {service ? (
                   <Badge variant="outline">{service.name}</Badge>
@@ -555,6 +790,24 @@ function EventDetailDialog({
               </>
             ) : null}
           </div>
+          {payLine ? (
+            <p className="text-xs text-muted-foreground">{payLine}</p>
+          ) : null}
+          {scheduled?.decline_reason ? (
+            <p className="text-xs text-muted-foreground">
+              Reason: {scheduled.decline_reason}
+            </p>
+          ) : null}
+          {scheduled?.cancellation_reason ? (
+            <p className="text-xs text-muted-foreground">
+              Cancelled: {scheduled.cancellation_reason}
+            </p>
+          ) : null}
+          {!isTrainer && scheduled ? (
+            <p className="rounded-md border border-border bg-background/40 p-3 text-xs text-muted-foreground">
+              {studentNextStep(scheduled)}
+            </p>
+          ) : null}
           {event.notes ? (
             <p className="rounded-md border border-border bg-background/40 p-3 text-xs italic text-muted-foreground">
               {event.notes}
@@ -563,10 +816,206 @@ function EventDetailDialog({
         </div>
         ) : null}
 
+        {/* ── Coach booking actions ── */}
+        {!editing && isTrainer && scheduled && isPending ? (
+          <div className="space-y-2 rounded-md border border-amber-500/40 bg-amber-500/5 p-3">
+            {panel === 'none' ? (
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  size="sm"
+                  disabled={busy}
+                  onClick={() => setPanel('approve')}
+                >
+                  <Check className="h-4 w-4" />
+                  Approve
+                </Button>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  disabled={busy}
+                  onClick={() => setPanel('decline')}
+                >
+                  <ThumbsDown className="h-4 w-4" />
+                  Decline
+                </Button>
+              </div>
+            ) : null}
+
+            {panel === 'approve' ? (
+              <div className="space-y-2">
+                <p className="text-xs font-medium text-muted-foreground">
+                  How is this one settled?
+                </p>
+                <div className="flex flex-col gap-2">
+                  <Button
+                    size="sm"
+                    disabled={busy}
+                    onClick={() => void approve({})}
+                  >
+                    Approve
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    disabled={busy}
+                    onClick={() => void approve({ waive_payment: true })}
+                  >
+                    Approve + waive payment
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    disabled={busy}
+                    onClick={() => setPanel('markPaidApprove')}
+                  >
+                    Approve + mark paid…
+                  </Button>
+                  {packageExhausted ? (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      disabled={busy}
+                      onClick={() => void approve({ drop_package: true })}
+                    >
+                      Approve as drop-in (package is empty)
+                    </Button>
+                  ) : null}
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    disabled={busy}
+                    onClick={() => setPanel('none')}
+                  >
+                    Back
+                  </Button>
+                </div>
+              </div>
+            ) : null}
+
+            {panel === 'markPaidApprove' ? (
+              <MarkPaidFields
+                method={method}
+                onMethod={setMethod}
+                notes={payNotes}
+                onNotes={setPayNotes}
+                busy={busy}
+                submitLabel="Approve + mark paid"
+                onSubmit={() =>
+                  void approve({
+                    mark_paid: {
+                      method,
+                      ...(payNotes.trim() ? { notes: payNotes.trim() } : {}),
+                    },
+                  })
+                }
+                onBack={() => setPanel('approve')}
+              />
+            ) : null}
+
+            {panel === 'decline' ? (
+              <div className="space-y-2">
+                <Label htmlFor="decline-reason">Reason (optional)</Label>
+                <Textarea
+                  id="decline-reason"
+                  rows={2}
+                  value={declineReason}
+                  onChange={(e) => setDeclineReason(e.target.value)}
+                  placeholder="Booked solid that morning — try Thursday?"
+                />
+                <div className="flex gap-2">
+                  <Button
+                    size="sm"
+                    variant="destructive"
+                    disabled={busy}
+                    onClick={() => void decline()}
+                  >
+                    Decline request
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    disabled={busy}
+                    onClick={() => setPanel('none')}
+                  >
+                    Back
+                  </Button>
+                </div>
+              </div>
+            ) : null}
+          </div>
+        ) : null}
+
+        {!editing && isTrainer && scheduled && isAwaitingPayment ? (
+          <div className="space-y-2 rounded-md border border-orange-500/40 bg-orange-500/5 p-3">
+            {panel === 'markPaidSettle' ? (
+              <MarkPaidFields
+                method={method}
+                onMethod={setMethod}
+                notes={payNotes}
+                onNotes={setPayNotes}
+                busy={busy}
+                submitLabel="Mark paid"
+                onSubmit={() => void markPaid()}
+                onBack={() => setPanel('none')}
+              />
+            ) : (
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  size="sm"
+                  disabled={busy}
+                  onClick={() => setPanel('markPaidSettle')}
+                >
+                  <CreditCard className="h-4 w-4" />
+                  Mark paid
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={busy}
+                  onClick={() => void waivePayment()}
+                >
+                  Waive payment
+                </Button>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  disabled={busy}
+                  onClick={() => setStatus('cancelled', 'Cancelled')}
+                >
+                  <X className="h-4 w-4" />
+                  Cancel
+                </Button>
+              </div>
+            )}
+          </div>
+        ) : null}
+
+        {/* ── Client actions ── */}
+        {!editing && !isTrainer && scheduled ? (
+          <div className="flex flex-wrap gap-2">
+            {isAwaitingPayment && onPay ? (
+              <Button disabled={busy} onClick={() => onPay(scheduled)}>
+                <CreditCard className="h-4 w-4" />
+                Pay now
+              </Button>
+            ) : null}
+            {(isPending || isAwaitingPayment) && onCancelRequest ? (
+              <Button
+                variant="ghost"
+                disabled={busy}
+                onClick={() => onCancelRequest(scheduled)}
+              >
+                <X className="h-4 w-4" />
+                Cancel request
+              </Button>
+            ) : null}
+          </div>
+        ) : null}
+
         {!editing ? (
         <DialogFooter className="flex-col gap-2 sm:flex-col sm:items-stretch">
           {/* Primary action row — Mark Done is the everyday path. */}
-          {!event.fulfilled_session_id && !planAlreadyDone ? (
+          {showEverydayActions ? (
             <div className="flex flex-wrap gap-2">
               <Button onClick={markDone} disabled={busy} className="flex-1">
                 <Check className="h-4 w-4" />
@@ -606,7 +1055,7 @@ function EventDetailDialog({
           )}
 
           {/* Optional — only when the trainer wants AI insights. */}
-          {!event.fulfilled_session_id && !planAlreadyDone ? (
+          {showEverydayActions ? (
             <button
               type="button"
               onClick={logSession}
@@ -617,34 +1066,97 @@ function EventDetailDialog({
             </button>
           ) : null}
 
-          {/* Edit + delete row — always available. Edit only on scheduled. */}
-          <div className="flex justify-end gap-2">
-            {scheduled ? (
+          {/* Edit + delete row — coach only. Edit only on scheduled. */}
+          {isTrainer ? (
+            <div className="flex justify-end gap-2">
+              {scheduled ? (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  disabled={busy}
+                  onClick={() => setEditing(true)}
+                >
+                  <Pencil className="h-4 w-4" />
+                  Edit
+                </Button>
+              ) : null}
               <Button
                 variant="ghost"
                 size="sm"
                 disabled={busy}
-                onClick={() => setEditing(true)}
+                onClick={deleteEvent}
+                className="text-rose-300 hover:bg-rose-500/10 hover:text-rose-200"
               >
-                <Pencil className="h-4 w-4" />
-                Edit
+                <Trash2 className="h-4 w-4" />
+                Delete
               </Button>
-            ) : null}
-            <Button
-              variant="ghost"
-              size="sm"
-              disabled={busy}
-              onClick={deleteEvent}
-              className="text-rose-300 hover:bg-rose-500/10 hover:text-rose-200"
-            >
-              <Trash2 className="h-4 w-4" />
-              Delete
-            </Button>
-          </div>
+            </div>
+          ) : null}
         </DialogFooter>
         ) : null}
       </DialogContent>
     </Dialog>
+  );
+}
+
+/** Method + notes fields shared by "approve + mark paid" and "mark paid". */
+function MarkPaidFields({
+  method,
+  onMethod,
+  notes,
+  onNotes,
+  busy,
+  submitLabel,
+  onSubmit,
+  onBack,
+}: {
+  method: MarkPaidMethod;
+  onMethod: (m: MarkPaidMethod) => void;
+  notes: string;
+  onNotes: (v: string) => void;
+  busy: boolean;
+  submitLabel: string;
+  onSubmit: () => void;
+  onBack: () => void;
+}) {
+  return (
+    <div className="space-y-2">
+      <div className="space-y-2">
+        <Label>How did they pay?</Label>
+        <Select
+          value={method}
+          onValueChange={(v) => onMethod(v as MarkPaidMethod)}
+        >
+          <SelectTrigger>
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {MARK_PAID_METHODS.map((m) => (
+              <SelectItem key={m} value={m} className="capitalize">
+                {m}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+      <div className="space-y-2">
+        <Label htmlFor="mark-paid-notes">Notes (optional)</Label>
+        <Input
+          id="mark-paid-notes"
+          value={notes}
+          onChange={(e) => onNotes(e.target.value)}
+          placeholder="Reference / who handed it over"
+        />
+      </div>
+      <div className="flex gap-2">
+        <Button size="sm" disabled={busy} onClick={onSubmit}>
+          {submitLabel}
+        </Button>
+        <Button size="sm" variant="ghost" disabled={busy} onClick={onBack}>
+          Back
+        </Button>
+      </div>
+    </div>
   );
 }
 
@@ -742,29 +1254,5 @@ function EditScheduledForm({
         </Button>
       </div>
     </form>
-  );
-}
-
-// ============================================================================
-// Legend
-// ============================================================================
-
-function Legend() {
-  const items: Array<{ label: string; cls: string }> = [
-    { label: 'Scheduled', cls: 'bg-sky-500' },
-    { label: 'Logged', cls: 'bg-emerald-500' },
-    { label: 'No-show', cls: 'bg-amber-500' },
-    { label: 'Cancelled', cls: 'bg-rose-500' },
-    { label: 'Plan', cls: 'bg-violet-500' },
-  ];
-  return (
-    <div className="flex flex-wrap items-center gap-3 text-[11px] text-muted-foreground">
-      {items.map((i) => (
-        <div key={i.label} className="flex items-center gap-1">
-          <span className={cn('h-2 w-2 rounded-full', i.cls)} />
-          {i.label}
-        </div>
-      ))}
-    </div>
   );
 }

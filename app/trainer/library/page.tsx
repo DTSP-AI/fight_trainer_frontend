@@ -28,25 +28,35 @@ const SPORTS: { value: Sport; label: string }[] = [
 
 export default function TrainerLibraryPage() {
   const [sport, setSport] = useState<Sport>('bjj');
-  const [techniques, setTechniques] = useState<Technique[] | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  // The result is tagged with the sport it was fetched for, so switching sport
+  // falls back to the loading state by derivation rather than by resetting
+  // state synchronously inside the effect.
+  const [loaded, setLoaded] = useState<{
+    sport: Sport;
+    techniques: Technique[] | null;
+    error: string | null;
+  } | null>(null);
 
   useEffect(() => {
     let cancelled = false;
-    setTechniques(null);
-    setError(null);
     libraryApi
       .techniques({ sport, limit: 200 })
       .then((res) => {
-        if (!cancelled) setTechniques(res);
+        if (!cancelled) setLoaded({ sport, techniques: res, error: null });
       })
       .catch((err: unknown) => {
-        if (!cancelled) setError(describeApiError(err));
+        if (!cancelled) {
+          setLoaded({ sport, techniques: null, error: describeApiError(err) });
+        }
       });
     return () => {
       cancelled = true;
     };
   }, [sport]);
+
+  const current = loaded?.sport === sport ? loaded : null;
+  const techniques = current?.techniques ?? null;
+  const error = current?.error ?? null;
 
   const grouped = useMemo(() => {
     if (!techniques) return new Map<string, Technique[]>();

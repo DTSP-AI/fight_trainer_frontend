@@ -1,16 +1,15 @@
-// @ts-nocheck — PENDING HARNESS: @playwright/test is NOT yet installed;
-// without this directive `tsc --noEmit` fails with TS2307 on the import
-// below (tsconfig's `**/*.ts` include covers this file and e2e/).
 /**
  * PENDING HARNESS — @playwright/test is NOT yet a dependency of this repo.
  *
- * Authored by the phase-gate frontend QA pass so the harness is one command
- * away. To activate:
+ * Until the harness lands, this file and e2e/ are excluded from tsconfig.json
+ * (and from ESLint) so `tsc --noEmit` does not fail with TS2307 on the import
+ * below. To activate:
  *
  *   pnpm add -D @playwright/test && pnpm exec playwright install chromium
  *   pnpm exec playwright test
  *
- * Then remove the @ts-nocheck directive above.
+ * Then drop "playwright.config.ts" and "e2e/**" from tsconfig.json's exclude
+ * list and from the ignores in eslint.config.mjs.
  */
 import { defineConfig, devices } from '@playwright/test';
 

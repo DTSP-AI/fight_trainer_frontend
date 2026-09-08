@@ -40,7 +40,6 @@ export function RoleGate({ role, children }: RoleGateProps) {
       }
       setReady(true);
     })().catch((err: unknown) => {
-      // eslint-disable-next-line no-console
       console.error('RoleGate auth check failed', err);
     });
     return () => {

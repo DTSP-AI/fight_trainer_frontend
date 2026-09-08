@@ -1,13 +1,55 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import {
+  Suspense,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
+import { useSearchParams } from 'next/navigation';
+import { toast } from 'sonner';
 import { LoadingState } from '@/components/common/loading-state';
 import { EmptyState } from '@/components/common/empty-state';
 import { PushToggle } from '@/components/common/push-toggle';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { calendarApi, type CalendarEvent } from '@/lib/api/calendar';
-import { describeApiError } from '@/lib/api';
+import { Button } from '@/components/ui/button';
+import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import { SessionsCalendar } from '@/components/trainer/sessions-calendar';
+import {
+  availabilityApi,
+  bookingApi,
+  calendarApi,
+  type AvailableSlot,
+  type BookableService,
+  type CalendarEvent,
+  type ScheduledEvent,
+} from '@/lib/api/calendar';
+import { billingApi, type PackageRow } from '@/lib/api/billing';
+import { studentPortalApi } from '@/lib/api/student-portal';
+import { ApiClientError, describeApiError } from '@/lib/api';
+import { STATUS_LABEL, eventTone } from '@/lib/schedule-tones';
+import type { Student } from '@/lib/types';
+
+const DROP_IN = '__drop_in__';
 
 function fmtWhen(iso: string): string {
   try {
@@ -21,6 +63,13 @@ function fmtWhen(iso: string): string {
   } catch {
     return iso;
   }
+}
+
+function fmtCents(cents: number): string {
+  return new Intl.NumberFormat('en-US', {
+    style: 'currency',
+    currency: 'USD',
+  }).format(cents / 100);
 }
 
 function bucketEvents(events: CalendarEvent[]) {
@@ -42,8 +91,26 @@ function bucketEvents(events: CalendarEvent[]) {
 }
 
 export default function StudentSchedulePage() {
+  // useSearchParams requires a Suspense boundary during prerender.
+  return (
+    <Suspense fallback={<LoadingState label="Loading your schedule…" />}>
+      <StudentScheduleContent />
+    </Suspense>
+  );
+}
+
+function StudentScheduleContent() {
+  const searchParams = useSearchParams();
+  const justPaid = searchParams.get('paid') === '1';
+  const paidToastShown = useRef(false);
+
+  const [me, setMe] = useState<Student | null>(null);
   const [events, setEvents] = useState<CalendarEvent[] | null>(null);
+  const [slots, setSlots] = useState<AvailableSlot[]>([]);
+  const [services, setServices] = useState<BookableService[]>([]);
+  const [packages, setPackages] = useState<PackageRow[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [pickedSlot, setPickedSlot] = useState<AvailableSlot | null>(null);
 
   const refresh = useCallback(async () => {
     try {
@@ -52,24 +119,95 @@ export default function StudentSchedulePage() {
       from.setDate(from.getDate() - 30);
       const to = new Date(now);
       to.setDate(to.getDate() + 60);
-      const evs = await calendarApi.events({
-        from_date: from.toISOString(),
-        to_date: to.toISOString(),
-      });
+      const slotsTo = new Date(now);
+      slotsTo.setDate(slotsTo.getDate() + 42);
+
+      const student = await studentPortalApi.me();
+      const [evs, slotRes, pkgs] = await Promise.all([
+        calendarApi.events({
+          from_date: from.toISOString(),
+          to_date: to.toISOString(),
+        }),
+        availabilityApi.slots({
+          from_date: now.toISOString(),
+          to_date: slotsTo.toISOString(),
+        }),
+        billingApi.listPackages(student.id),
+      ]);
+      setMe(student);
       setEvents(evs);
+      setSlots(slotRes.slots);
+      setServices(slotRes.services);
+      setPackages(pkgs);
+      setError(null);
     } catch (err) {
       setError(describeApiError(err));
     }
   }, []);
 
   useEffect(() => {
-    void refresh();
+    // Wrapped so the loader's setState calls land in a promise callback
+    // rather than synchronously in the effect body.
+    void (async () => {
+      await refresh();
+    })();
   }, [refresh]);
+
+  // Back from Stripe checkout.
+  useEffect(() => {
+    if (!justPaid || paidToastShown.current) return;
+    paidToastShown.current = true;
+    void (async () => {
+      toast.success("Payment received — you're locked in");
+      await refresh();
+    })();
+  }, [justPaid, refresh]);
 
   const { upcoming, past } = useMemo(
     () => bucketEvents(events ?? []),
     [events],
   );
+
+  const studentMap = useMemo(
+    () => (me ? new Map([[me.id, me]]) : new Map<string, Student>()),
+    [me],
+  );
+  const serviceMap = useMemo(
+    () => new Map(services.map((s) => [s.id, s])),
+    [services],
+  );
+  const packageMap = useMemo(
+    () => new Map(packages.map((p) => [p.id, p])),
+    [packages],
+  );
+
+  const bookablePackages = useMemo(
+    () =>
+      packages.filter(
+        (p) => p.status === 'active' && p.sessions_remaining > 0,
+      ),
+    [packages],
+  );
+
+  async function pay(ev: ScheduledEvent) {
+    try {
+      const res = await bookingApi.checkout(ev.id);
+      window.location.assign(res.checkout_url);
+    } catch (err) {
+      toast.error(describeApiError(err));
+    }
+  }
+
+  async function cancelRequest(ev: ScheduledEvent) {
+    if (!window.confirm('Cancel this request?')) return;
+    try {
+      await bookingApi.cancelRequest(ev.id);
+      toast.success('Request cancelled');
+      void refresh();
+    } catch (err) {
+      toast.error(describeApiError(err));
+    }
+  }
 
   if (error) {
     return (
@@ -78,19 +216,54 @@ export default function StudentSchedulePage() {
       </p>
     );
   }
-  if (!events) return <LoadingState label="Loading your schedule…" />;
+  if (!events || !me) return <LoadingState label="Loading your schedule…" />;
 
   return (
-    <div className="mx-auto max-w-3xl space-y-6">
+    <div className="mx-auto max-w-4xl space-y-6">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h1 className="text-3xl font-semibold tracking-tight">Schedule</h1>
           <p className="mt-1 text-sm text-muted-foreground">
-            Your upcoming and recent sessions. Your coach manages dates.
+            Pick an open spot to request a session. Your coach approves, and
+            it&apos;s locked in once payment is settled.
           </p>
         </div>
         <PushToggle />
       </div>
+
+      <Card>
+        <CardContent className="py-4">
+          <SessionsCalendar
+            mode="student"
+            events={events}
+            studentMap={studentMap}
+            serviceMap={serviceMap}
+            packageMap={packageMap}
+            availableSlots={slots}
+            onChanged={refresh}
+            onPickSlot={setPickedSlot}
+            onPay={pay}
+            onCancelRequest={cancelRequest}
+          />
+        </CardContent>
+      </Card>
+
+      <RequestSessionDialog
+        key={pickedSlot?.starts_at ?? 'no-slot'}
+        slot={pickedSlot}
+        services={services}
+        packages={bookablePackages}
+        serviceMap={serviceMap}
+        onClose={() => setPickedSlot(null)}
+        onBooked={() => {
+          setPickedSlot(null);
+          void refresh();
+        }}
+        onSlotTaken={() => {
+          setPickedSlot(null);
+          void refresh();
+        }}
+      />
 
       <section className="space-y-2">
         <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
@@ -99,7 +272,7 @@ export default function StudentSchedulePage() {
         {upcoming.length === 0 ? (
           <EmptyState
             title="Nothing on the calendar"
-            description="Your coach hasn't added any upcoming sessions yet."
+            description="Grab an open spot above to send your coach a request."
           />
         ) : (
           <div className="space-y-2">
@@ -115,9 +288,7 @@ export default function StudentSchedulePage() {
           Past 30 days
         </h2>
         {past.length === 0 ? (
-          <p className="text-xs text-muted-foreground">
-            No recent sessions.
-          </p>
+          <p className="text-xs text-muted-foreground">No recent sessions.</p>
         ) : (
           <div className="space-y-2">
             {past.slice(0, 20).map((e) => (
@@ -130,9 +301,152 @@ export default function StudentSchedulePage() {
   );
 }
 
+// ============================================================================
+// Request dialog — service + package choice for one open slot
+// ============================================================================
+
+function RequestSessionDialog({
+  slot,
+  services,
+  packages,
+  serviceMap,
+  onClose,
+  onBooked,
+  onSlotTaken,
+}: {
+  slot: AvailableSlot | null;
+  services: BookableService[];
+  packages: PackageRow[];
+  serviceMap: Map<string, BookableService>;
+  onClose: () => void;
+  onBooked: () => void;
+  onSlotTaken: () => void;
+}) {
+  // Defaults come from the initial render; the parent remounts this dialog
+  // (keyed on the slot) so a new pick starts from a clean form.
+  const [serviceId, setServiceId] = useState(services[0]?.id ?? '');
+  const [packageId, setPackageId] = useState(DROP_IN);
+  const [notes, setNotes] = useState('');
+  const [busy, setBusy] = useState(false);
+
+  if (!slot) return null;
+
+  const service = services.find((s) => s.id === serviceId);
+
+  async function submit() {
+    if (!slot || !serviceId) return;
+    setBusy(true);
+    try {
+      await bookingApi.request({
+        starts_at: slot.starts_at,
+        service_id: serviceId,
+        ...(packageId !== DROP_IN ? { package_id: packageId } : {}),
+        ...(notes.trim() ? { notes: notes.trim() } : {}),
+      });
+      toast.success('Request sent — waiting on your coach');
+      onBooked();
+    } catch (err) {
+      if (err instanceof ApiClientError && err.code === 'SLOT_TAKEN') {
+        toast.error('That spot was just taken');
+        onSlotTaken();
+      } else {
+        toast.error(describeApiError(err));
+      }
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Dialog open onOpenChange={(o) => (!o ? onClose() : undefined)}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Request this spot</DialogTitle>
+          <DialogDescription>
+            {fmtWhen(slot.starts_at)} · {slot.duration_minutes} min
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="space-y-3">
+          <div className="space-y-2">
+            <Label>Session type</Label>
+            <Select value={serviceId} onValueChange={setServiceId}>
+              <SelectTrigger>
+                <SelectValue placeholder="Pick a session type" />
+              </SelectTrigger>
+              <SelectContent>
+                {services.map((s) => (
+                  <SelectItem key={s.id} value={s.id}>
+                    {s.name} · {fmtCents(s.default_price_cents)}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="space-y-2">
+            <Label>How you&apos;re covering it</Label>
+            <Select value={packageId} onValueChange={setPackageId}>
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {packages.map((p) => (
+                  <SelectItem key={p.id} value={p.id}>
+                    Use package credit:{' '}
+                    {serviceMap.get(p.service_id)?.name ?? 'Package'} (
+                    {p.sessions_remaining} left)
+                  </SelectItem>
+                ))}
+                <SelectItem value={DROP_IN}>
+                  Pay per session
+                  {service ? ` (${fmtCents(service.default_price_cents)})` : ''}
+                </SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="request-notes">
+              Anything your coach should know? (optional)
+            </Label>
+            <Textarea
+              id="request-notes"
+              rows={2}
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
+              placeholder="Working the guard passing series"
+            />
+          </div>
+        </div>
+
+        <DialogFooter>
+          <Button variant="ghost" disabled={busy} onClick={onClose}>
+            Never mind
+          </Button>
+          <Button disabled={busy || !serviceId} onClick={() => void submit()}>
+            {busy ? 'Sending…' : 'Send request'}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// ============================================================================
+// List rows
+// ============================================================================
+
 function EventRow({ ev, muted }: { ev: CalendarEvent; muted?: boolean }) {
   const isLogged = !!ev.fulfilled_session_id;
-  const status = ev.kind === 'scheduled' ? ev.status ?? 'scheduled' : null;
+  const tone = eventTone(ev);
+  const variant =
+    tone === 'cancelled' || tone === 'no_show' || tone === 'declined'
+      ? 'destructive'
+      : isLogged || tone === 'completed'
+        ? 'default'
+        : 'secondary';
+
   return (
     <Card className={muted ? 'opacity-80' : ''}>
       <CardContent className="flex flex-wrap items-center justify-between gap-2 py-3">
@@ -143,22 +457,12 @@ function EventRow({ ev, muted }: { ev: CalendarEvent; muted?: boolean }) {
             {ev.kind === 'planned' && ev.session_type
               ? ` · ${ev.session_type}`
               : ''}
-            {ev.kind === 'planned' && ev.plan_focus
-              ? ` · ${ev.plan_focus}`
-              : ''}
+            {ev.kind === 'planned' && ev.plan_focus ? ` · ${ev.plan_focus}` : ''}
           </div>
         </div>
-        {isLogged ? (
-          <Badge>Done</Badge>
-        ) : status === 'no_show' ? (
-          <Badge variant="destructive">Missed</Badge>
-        ) : status === 'cancelled' ? (
-          <Badge variant="destructive">Cancelled</Badge>
-        ) : ev.kind === 'planned' ? (
-          <Badge variant="secondary">Plan</Badge>
-        ) : (
-          <Badge variant="secondary">Scheduled</Badge>
-        )}
+        <Badge variant={variant}>
+          {isLogged ? 'Done' : STATUS_LABEL[tone]}
+        </Badge>
       </CardContent>
     </Card>
   );

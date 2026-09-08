@@ -72,7 +72,11 @@ export default function StudentIntakePage() {
   }, []);
 
   useEffect(() => {
-    void load();
+    // Wrapped so the loader's setState calls land in a promise callback
+    // rather than synchronously in the effect body.
+    void (async () => {
+      await load();
+    })();
   }, [load]);
 
   const waiverSigned = Boolean(bundle?.waiver_signed);

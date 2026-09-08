@@ -62,7 +62,11 @@ export default function FighterDetailPage() {
 
   useEffect(() => {
     if (!fighterId) return;
-    void refresh();
+    // Wrapped so the loader's setState calls land in a promise callback
+    // rather than synchronously in the effect body.
+    void (async () => {
+      await refresh();
+    })();
   }, [fighterId, refresh]);
 
   useEffect(() => {
@@ -155,7 +159,7 @@ export default function FighterDetailPage() {
           </h1>
           {f.nickname ? (
             <p className="mt-1 text-sm italic text-muted-foreground">
-              "{f.nickname}"
+              &ldquo;{f.nickname}&rdquo;
             </p>
           ) : null}
           <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">

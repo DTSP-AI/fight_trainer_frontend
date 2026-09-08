@@ -21,9 +21,12 @@ export function ClipFeed() {
   const [initialized, setInitialized] = useState(false);
   const sentinelRef = useRef<HTMLDivElement | null>(null);
 
+  const loadingRef = useRef(false);
+
   const loadPage = useCallback(
     async (cur: string | null) => {
-      if (loading) return;
+      if (loadingRef.current) return;
+      loadingRef.current = true;
       setLoading(true);
       setError(null);
       try {
@@ -38,17 +41,21 @@ export function ClipFeed() {
       } catch (err) {
         setError(describeApiError(err));
       } finally {
+        loadingRef.current = false;
         setLoading(false);
         setInitialized(true);
       }
     },
-    [loading],
+    [],
   );
 
   useEffect(() => {
-    void loadPage(null);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+    // Wrapped so the loader's setState calls land in a promise callback
+    // rather than synchronously in the effect body.
+    void (async () => {
+      await loadPage(null);
+    })();
+  }, [loadPage]);
 
   useEffect(() => {
     if (!hasMore || !sentinelRef.current) return;
