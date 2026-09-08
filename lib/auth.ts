@@ -68,6 +68,33 @@ export async function signInWithPassword(
   return { ok: true };
 }
 
+/**
+ * Create an email + password account (clients without a Google account).
+ * Supabase emails a confirmation link that lands on `redirectTo` (route it
+ * through /auth/callback so the code becomes a cookie session). The confirmed
+ * session carries `email_verified`, which is what /auth/student/claim requires.
+ *
+ * `existing` is true when Supabase reports the address already has an
+ * account (it returns a user with no identities rather than an error, to
+ * avoid enumeration) — the caller should offer sign-in instead.
+ */
+export async function signUpWithPassword(
+  email: string,
+  password: string,
+  redirectTo: string,
+): Promise<{ ok: boolean; error?: string; existing?: boolean; confirmed?: boolean }> {
+  const sb = getSupabaseBrowser();
+  const { data, error } = await sb.auth.signUp({
+    email,
+    password,
+    options: { emailRedirectTo: redirectTo },
+  });
+  if (error) return { ok: false, error: error.message };
+  const identities = data.user?.identities ?? [];
+  if (data.user && identities.length === 0) return { ok: true, existing: true };
+  return { ok: true, confirmed: !!data.session };
+}
+
 export async function signOut(): Promise<void> {
   const sb = getSupabaseBrowser();
   await sb.auth.signOut();

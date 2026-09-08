@@ -6,9 +6,10 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { BRAND } from '@/lib/brand';
 
 /**
- * CLIENT signup — Supabase-native. Clients don't create passwords or enter
- * codes: their coach adds them by email, they open the invite link, and sign
- * in with Google. This page points them to that flow. Coach setup is separate.
+ * CLIENT signup — Supabase-native. Clients join by invite: their coach adds
+ * them by email, they open the invite link, and prove they own that email
+ * with Google or an email + password. This page points them to that flow.
+ * Coach setup is separate.
  */
 function ClientSignupCard() {
   return (
@@ -18,12 +19,12 @@ function ClientSignupCard() {
       </CardHeader>
       <CardContent>
         <p className="mb-4 rounded-md border border-border bg-muted/30 p-3 text-xs text-muted-foreground">
-          Clients join by invite. Your coach adds you by email, then you sign in
-          with Google — no password to create. Open the invite link your coach
-          emailed, or continue below with the same email address.
+          Clients join by invite. Your coach adds you by email, then you
+          continue with Google or create a password — using the same email
+          address. Open the invite link your coach emailed, or continue below.
         </p>
         <Button asChild className="w-full" size="lg">
-          <Link href="/auth/student/accept">Continue with Google</Link>
+          <Link href="/auth/student/accept">Accept your invite</Link>
         </Button>
         <p className="mt-6 text-center text-sm">
           Already have an account?{' '}
