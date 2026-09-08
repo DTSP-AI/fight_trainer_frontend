@@ -8,7 +8,7 @@ export default function StudentProfilePage() {
       <div>
         <h1 className="text-3xl font-semibold tracking-tight">Profile</h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          What your coach has on file. Ask them to update anything that's off.
+          What your coach has on file. Ask them to update anything that&apos;s off.
         </p>
       </div>
       <ProfileView />

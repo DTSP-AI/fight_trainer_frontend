@@ -78,7 +78,11 @@ export default function StudentBillingPage() {
 
   useEffect(() => {
     if (!studentId) return;
-    void refresh();
+    // Wrapped so the loader's setState calls land in a promise callback
+    // rather than synchronously in the effect body.
+    void (async () => {
+      await refresh();
+    })();
   }, [studentId, refresh]);
 
   if (error) {

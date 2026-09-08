@@ -18,17 +18,20 @@ one before — it is not part of this stack.
 `package-lock.json`; running `npm install` here fails with an opaque internal
 error. Use `pnpm`.
 
-`pnpm typecheck` (tsc --noEmit) is THE gate, plus `pnpm build`. Both must pass
-before a commit.
+`pnpm typecheck` (tsc --noEmit), `pnpm lint` (eslint .) and `pnpm build` are
+THE gates. All three must pass before a commit.
 
-`pnpm lint` works as of 2026-09-04 (`eslint.config.mjs`, ESLint 9 flat config
-using eslint-config-next's native flat exports — do NOT bridge it through
-FlatCompat, that throws on a circular plugin reference). It reports 33
-pre-existing errors and is therefore NOT yet a blocking gate. Two rules only:
-add no NEW violations, and never silence one with `// eslint-disable`.
+`pnpm lint` is at ZERO errors / ZERO warnings as of 2026-09-08 and is a
+blocking gate (Pete: stay on top of lint on the front). `eslint.config.mjs`
+is an ESLint 9 flat config using eslint-config-next's native flat exports — do
+NOT bridge it through FlatCompat, that throws on a circular plugin reference.
+Two rules: never land a violation, and never silence one with
+`// eslint-disable` or a rule downgrade — fix the code (hook deps, derive state
+during render instead of set-state-in-effect, `useWatch` over `watch()`).
 
-Playwright specs exist in `e2e/` but `@playwright/test` is not installed, which
-is why `playwright.config.ts` carries a `@ts-nocheck`. There is no unit-test
+Playwright specs exist in `e2e/` but `@playwright/test` is not installed;
+`playwright.config.ts` and `e2e/**` are excluded from tsconfig and ESLint until
+the harness lands (steps are in the file header). There is no unit-test
 harness. When a change deserves regression coverage, that coverage belongs in
 the backend suite or is called out as post-ship work — do not stand up a harness
 mid-task.

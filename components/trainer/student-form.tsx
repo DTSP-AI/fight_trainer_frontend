@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { useForm } from 'react-hook-form';
+import { useForm, useWatch } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { toast } from 'sonner';
@@ -85,7 +85,7 @@ export function StudentForm({ initial }: { initial?: Student } = {}) {
     register,
     handleSubmit,
     setValue,
-    watch,
+    control,
     formState: { errors },
   } = useForm<FormValues>({
     resolver: zodResolver(schema),
@@ -112,8 +112,9 @@ export function StudentForm({ initial }: { initial?: Student } = {}) {
         },
   });
 
-  const sport = watch('primary_sport');
-  const skill = watch('skill_level');
+  const sport = useWatch({ control, name: 'primary_sport' });
+  const skill = useWatch({ control, name: 'skill_level' });
+  const notes = useWatch({ control, name: 'notes' });
   const isBjj = sport === 'bjj';
 
   async function onSubmit(values: FormValues) {
@@ -294,7 +295,7 @@ export function StudentForm({ initial }: { initial?: Student } = {}) {
           id="notes"
           rows={4}
           placeholder="Competition prep, injuries, anything that should travel with the client record."
-          value={watch('notes') ?? ''}
+          value={notes ?? ''}
           onChange={(v) => setValue('notes', v, { shouldDirty: true })}
           assistKind="student_notes"
         />

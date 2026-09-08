@@ -92,24 +92,35 @@ function NodeRow({ node, depth }: { node: TreeNode; depth: number }) {
 
 export function TaxonomyTree() {
   const [sport, setSport] = useState<Sport>('bjj');
-  const [items, setItems] = useState<Technique[] | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  // The result is tagged with the sport it was fetched for, so switching sport
+  // falls back to the loading state by derivation rather than by resetting
+  // state synchronously inside the effect.
+  const [loaded, setLoaded] = useState<{
+    sport: Sport;
+    items: Technique[] | null;
+    error: string | null;
+  } | null>(null);
 
   useEffect(() => {
     let cancelled = false;
-    setItems(null);
     libraryApi
       .techniques({ sport, limit: 500 })
       .then((res) => {
-        if (!cancelled) setItems(res);
+        if (!cancelled) setLoaded({ sport, items: res, error: null });
       })
       .catch((err: unknown) => {
-        if (!cancelled) setError(describeApiError(err));
+        if (!cancelled) {
+          setLoaded({ sport, items: null, error: describeApiError(err) });
+        }
       });
     return () => {
       cancelled = true;
     };
   }, [sport]);
+
+  const current = loaded?.sport === sport ? loaded : null;
+  const items = current?.items ?? null;
+  const error = current?.error ?? null;
 
   const tree = useMemo(() => (items ? buildTree(items) : []), [items]);
 

@@ -77,7 +77,7 @@ export default function StudentSessionsPage() {
       <div>
         <h1 className="text-3xl font-semibold tracking-tight">Sessions</h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          What you've got left, what you've used.
+          What you&apos;ve got left, what you&apos;ve used.
         </p>
       </div>
 

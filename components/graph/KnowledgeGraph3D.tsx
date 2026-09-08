@@ -174,9 +174,13 @@ export function KnowledgeGraph3D({
 }: KnowledgeGraph3DProps) {
   const sidePanelEnabled =
     showSidePanel ?? Boolean(onEdgeDelete || onEdgeReclassify);
-  const [payload, setPayload] = useState<KGPayload | null>(data ?? null);
-  const [loading, setLoading] = useState(!data);
-  const [error, setError] = useState<string>('');
+  // The fetch result is tagged with the request it answered, so `loading` and
+  // `error` are derived rather than assigned synchronously inside the effect.
+  const [fetched, setFetched] = useState<{
+    requestKey: string;
+    payload: KGPayload | null;
+    error: string;
+  } | null>(null);
   const [hidden, setHidden] = useState<Set<string>>(new Set());
   const [hovered, setHovered] = useState<KGNode | null>(null);
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
@@ -217,6 +221,16 @@ export function KnowledgeGraph3D({
   // already framed for that. Auto-fitting on engine settle fights the
   // user's drag — leave the camera alone (matches MW behavior).
 
+  // Identifies the request the current state belongs to; a change to any of
+  // these means the fetched result on hand is stale.
+  const requestKey = `${fetchUrl ?? ''}|${refreshKey ?? ''}|${refreshNonce}|${
+    authHeader ?? ''
+  }`;
+  const activeFetch = fetched?.requestKey === requestKey ? fetched : null;
+  const payload = data ?? activeFetch?.payload ?? null;
+  const error = data ? '' : (activeFetch?.error ?? '');
+  const loading = !data && !activeFetch;
+
   const nodePalette = useMemo(
     () => ({
       ...DEFAULT_NODE_PALETTE,
@@ -236,16 +250,8 @@ export function KnowledgeGraph3D({
 
   // ── Fetch ──
   useEffect(() => {
-    if (data) {
-      setPayload(data);
-      setLoading(false);
-      objectCacheRef.current.clear();
-      return;
-    }
-    if (!fetchUrl) return;
+    if (data || !fetchUrl) return;
     let cancelled = false;
-    setLoading(true);
-    setError('');
     const headers: Record<string, string> = {};
     if (authHeader) headers.Authorization = authHeader;
     fetch(fetchUrl, { headers })
@@ -258,20 +264,26 @@ export function KnowledgeGraph3D({
         if (!Array.isArray(json.nodes) || !Array.isArray(json.edges)) {
           throw new Error('Response missing nodes/edges arrays');
         }
-        setPayload(json);
-        objectCacheRef.current.clear();
+        setFetched({ requestKey, payload: json, error: '' });
       })
-      .catch((e) => {
+      .catch((e: Error) => {
         if (cancelled) return;
-        setError(e.message ?? 'Failed to load graph');
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false);
+        setFetched({
+          requestKey,
+          payload: null,
+          error: e.message || 'Failed to load graph',
+        });
       });
     return () => {
       cancelled = true;
     };
-  }, [data, fetchUrl, refreshKey, authHeader, refreshNonce]);
+  }, [data, fetchUrl, requestKey, authHeader]);
+
+  // The node-object cache is keyed by node id; drop it whenever the graph
+  // behind it is replaced.
+  useEffect(() => {
+    objectCacheRef.current.clear();
+  }, [payload]);
 
   // ── Responsive sizing ──
   useEffect(() => {
@@ -589,7 +601,8 @@ export function KnowledgeGraph3D({
   function toggleType(t: string) {
     setHidden((prev) => {
       const next = new Set(prev);
-      next.has(t) ? next.delete(t) : next.add(t);
+      if (next.has(t)) next.delete(t);
+      else next.add(t);
       return next;
     });
   }

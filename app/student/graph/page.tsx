@@ -40,7 +40,7 @@ export default function StudentGraphPage() {
       <div>
         <h1 className="text-3xl font-semibold tracking-tight">Technique graph</h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          The whole network's combat-sport knowledge map. Your drilled
+          The whole network&apos;s combat-sport knowledge map. Your drilled
           techniques light up emerald, current focus glows violet, and the
           recommended next steps burn amber. Click + drag to orbit, scroll
           to zoom.

@@ -14,7 +14,10 @@ const config = [
       'node_modules/**',
       'next-env.d.ts',
       'public/sw.js', // plain service worker, not part of the app build
-      'e2e/**', // specs authored ahead of the harness; @playwright/test not installed
+      // Authored ahead of the harness; @playwright/test is not installed, so
+      // these are also excluded from tsconfig.json until it lands.
+      'e2e/**',
+      'playwright.config.ts',
     ],
   },
   ...nextCoreWebVitals,

@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { useForm } from 'react-hook-form';
+import { useForm, useWatch } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { toast } from 'sonner';
@@ -62,7 +62,7 @@ export function SessionLogForm() {
     register,
     handleSubmit,
     setValue,
-    watch,
+    control,
     formState: { errors },
   } = useForm<FormValues>({
     resolver: zodResolver(schema),
@@ -72,10 +72,10 @@ export function SessionLogForm() {
     },
   });
 
-  const studentId = watch('student_id');
-  const notes = watch('notes');
-  const cues = watch('coaching_cues');
-  const transcript = watch('voice_transcript');
+  const studentId = useWatch({ control, name: 'student_id' });
+  const notes = useWatch({ control, name: 'notes' });
+  const cues = useWatch({ control, name: 'coaching_cues' });
+  const transcript = useWatch({ control, name: 'voice_transcript' });
 
   useEffect(() => {
     let cancelled = false;
@@ -206,7 +206,7 @@ export function SessionLogForm() {
               id="notes"
               rows={4}
               placeholder="What we worked. What landed in live. What broke down."
-              value={watch('notes') ?? ''}
+              value={notes ?? ''}
               onChange={(v) =>
                 setValue('notes', v, { shouldDirty: true })
               }
@@ -221,7 +221,7 @@ export function SessionLogForm() {
               id="coaching_cues"
               rows={2}
               placeholder="The 1-3 things you'd repeat in your student's ear."
-              value={watch('coaching_cues') ?? ''}
+              value={cues ?? ''}
               onChange={(v) =>
                 setValue('coaching_cues', v, { shouldDirty: true })
               }
@@ -272,7 +272,7 @@ export function SessionLogForm() {
               id="voice_transcript"
               rows={3}
               placeholder="Paste a dictation transcript — the pipeline reads it if present."
-              value={watch('voice_transcript') ?? ''}
+              value={transcript ?? ''}
               onChange={(v) =>
                 setValue('voice_transcript', v, { shouldDirty: true })
               }

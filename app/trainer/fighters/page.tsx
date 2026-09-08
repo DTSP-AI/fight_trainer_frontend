@@ -56,7 +56,7 @@ export default function FighterBankPage() {
       <div>
         <h1 className="text-3xl font-semibold tracking-tight">Fighter bank</h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          Every fighter you've analyzed lands here automatically. Click one
+          Every fighter you&apos;ve analyzed lands here automatically. Click one
           to see their fight history with you and chat about their style.
         </p>
       </div>
@@ -100,7 +100,7 @@ export default function FighterBankPage() {
                       {f.name}
                       {f.nickname ? (
                         <span className="text-xs italic text-muted-foreground">
-                          "{f.nickname}"
+                          &ldquo;{f.nickname}&rdquo;
                         </span>
                       ) : null}
                     </div>

@@ -240,7 +240,7 @@ function PublicInvoiceContent() {
                 </span>
               </div>
               <p className="text-xs text-muted-foreground">
-                Open your bank's Zelle, send <strong>{due}</strong> to the
+                Open your bank&apos;s Zelle, send <strong>{due}</strong> to the
                 number below.
               </p>
               {zelle.phone ? (

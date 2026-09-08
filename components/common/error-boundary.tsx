@@ -28,7 +28,6 @@ export class ErrorBoundary extends React.Component<
     // the console for dev visibility. Production wiring (Sentry, etc.)
     // lands in P9.
     if (typeof window !== 'undefined') {
-      // eslint-disable-next-line no-console
       console.error('UI error boundary:', error, info);
     }
   }

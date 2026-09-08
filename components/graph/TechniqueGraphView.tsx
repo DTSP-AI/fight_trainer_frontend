@@ -47,6 +47,10 @@ const DISCIPLINE_PALETTE: Record<string, string> = {
   default: '#94a3b8',
 };
 
+// Shared empty set so the "no overlay" case keeps a stable identity across
+// renders and does not invalidate downstream memos.
+const EMPTY_IDS: ReadonlySet<string> = new Set<string>();
+
 const STUDENT_OVERLAY_PALETTE: Record<string, string> = {
   drilled: '#10b981',
   focus: '#a78bfa',
@@ -82,8 +86,16 @@ export function TechniqueGraphView({
 }: Props) {
   const [nodes, setNodes] = useState<GraphNode[] | null>(null);
   const [edges, setEdges] = useState<GraphEdge[] | null>(null);
-  const [drilled, setDrilled] = useState<Set<string>>(new Set());
-  const [focus, setFocus] = useState<Set<string>>(new Set());
+  // Tagged with the student it belongs to, so clearing on a student change is
+  // a derivation rather than a setState inside the effect.
+  const [overlay, setOverlay] = useState<{
+    studentId: string;
+    drilled: Set<string>;
+    focus: Set<string>;
+  } | null>(null);
+  const activeOverlay = overlay?.studentId === studentId ? overlay : null;
+  const drilled = activeOverlay?.drilled ?? EMPTY_IDS;
+  const focus = activeOverlay?.focus ?? EMPTY_IDS;
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -116,18 +128,17 @@ export function TechniqueGraphView({
   }, [sport, initiative]);
 
   useEffect(() => {
-    if (!studentId) {
-      setDrilled(new Set());
-      setFocus(new Set());
-      return;
-    }
+    if (!studentId) return;
     let cancelled = false;
     graphApi
       .studentOverlay(studentId)
       .then((o) => {
         if (cancelled) return;
-        setDrilled(new Set(o.drilled_ids));
-        setFocus(new Set(o.focus_ids));
+        setOverlay({
+          studentId,
+          drilled: new Set(o.drilled_ids),
+          focus: new Set(o.focus_ids),
+        });
       })
       .catch(() => {
         // Soft-fail — overlay is optional.

@@ -189,7 +189,11 @@ export default function AnalysisDetailPage() {
 
   useEffect(() => {
     if (!id) return;
-    void fetchOnce();
+    // Wrapped so the loader's setState calls land in a promise callback
+    // rather than synchronously in the effect body.
+    void (async () => {
+      await fetchOnce();
+    })();
   }, [id, fetchOnce]);
 
   // Poll while pipeline still running

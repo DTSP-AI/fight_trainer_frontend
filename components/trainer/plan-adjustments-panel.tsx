@@ -210,7 +210,11 @@ export function PlanAdjustmentsPanel() {
   }, []);
 
   useEffect(() => {
-    void refresh();
+    // Wrapped so the loader's setState calls land in a promise callback
+    // rather than synchronously in the effect body.
+    void (async () => {
+      await refresh();
+    })();
   }, [refresh]);
 
   if (error) {

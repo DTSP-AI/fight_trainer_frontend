@@ -28,6 +28,7 @@ import {
 import { EmptyState } from '@/components/common/empty-state';
 import { LoadingState } from '@/components/common/loading-state';
 import { SessionsCalendar } from '@/components/trainer/sessions-calendar';
+import { ScheduleNewForm } from '@/components/trainer/schedule-new-form';
 import { AvailabilityEditor } from '@/components/trainer/availability-editor';
 import {
   billingApi,
@@ -78,6 +79,10 @@ export default function TrainerSchedulePage() {
   const [events, setEvents] = useState<CalendarEvent[] | null>(null);
   const [slots, setSlots] = useState<AvailableSlot[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [scheduleFormOpen, setScheduleFormOpen] = useState(false);
+  const [prefillDateTime, setPrefillDateTime] = useState<string | undefined>(
+    undefined,
+  );
 
   const refresh = useCallback(async () => {
     try {
@@ -234,6 +239,18 @@ export default function TrainerSchedulePage() {
           title="Calendar"
           subtitle="Everything on the board — booked, pending, and still open."
         />
+        <ScheduleNewForm
+          students={students}
+          services={services}
+          packages={packages}
+          onCreated={refresh}
+          open={scheduleFormOpen}
+          onOpenChange={(next) => {
+            setScheduleFormOpen(next);
+            if (!next) setPrefillDateTime(undefined);
+          }}
+          defaultDateTime={prefillDateTime}
+        />
         <Card>
           <CardContent className="py-4">
             <SessionsCalendar
@@ -243,6 +260,10 @@ export default function TrainerSchedulePage() {
               packageMap={packageMap}
               availableSlots={slots}
               onChanged={refresh}
+              onPickDay={(dt) => {
+                setPrefillDateTime(dt);
+                setScheduleFormOpen(true);
+              }}
             />
           </CardContent>
         </Card>

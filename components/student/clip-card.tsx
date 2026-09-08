@@ -73,7 +73,6 @@ export function ClipCard({ item }: ClipCardProps) {
       });
     } catch (err) {
       // Non-fatal. Auto-promotion can also fire on rating ≥4.
-      // eslint-disable-next-line no-console
       console.warn('mark viewed failed', describeApiError(err));
     }
   }

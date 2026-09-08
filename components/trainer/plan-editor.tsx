@@ -230,7 +230,12 @@ export function PlanEditor() {
   const [focus, setFocus] = useState('');
   const [sessions, setSessions] = useState<DraftSession[]>([]);
   const [saving, setSaving] = useState(false);
-  const [loadingPlan, setLoadingPlan] = useState(false);
+  // Tagged with the student the plan was loaded for, so the loading flag is
+  // derived rather than set synchronously inside the effect.
+  const [loadedPlanStudentId, setLoadedPlanStudentId] = useState<string | null>(
+    null,
+  );
+  const loadingPlan = Boolean(studentId) && loadedPlanStudentId !== studentId;
 
   useEffect(() => {
     let cancelled = false;
@@ -248,7 +253,6 @@ export function PlanEditor() {
   useEffect(() => {
     if (!studentId) return;
     let cancelled = false;
-    setLoadingPlan(true);
     plansApi
       .current(studentId)
       .then((res) => {
@@ -272,7 +276,7 @@ export function PlanEditor() {
       })
       .catch((err: unknown) => toast.error(describeApiError(err)))
       .finally(() => {
-        if (!cancelled) setLoadingPlan(false);
+        if (!cancelled) setLoadedPlanStudentId(studentId);
       });
     return () => {
       cancelled = true;
