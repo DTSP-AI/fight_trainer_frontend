@@ -3,6 +3,7 @@
 import {
   Activity,
   AlertTriangle,
+  CalendarClock,
   CalendarDays,
   Film,
   Library,
@@ -23,6 +24,7 @@ const GROUPS: NavGroup[] = [
       { href: '/trainer', label: 'Dashboard', icon: <Activity className="h-4 w-4" />, exact: true },
       { href: '/trainer/students', label: 'Clients', icon: <Users className="h-4 w-4" /> },
       { href: '/trainer/sessions', label: 'Sessions', icon: <Film className="h-4 w-4" /> },
+      { href: '/trainer/schedule', label: 'Schedule', icon: <CalendarClock className="h-4 w-4" /> },
       { href: '/trainer/billing', label: 'Billing', icon: <Receipt className="h-4 w-4" /> },
       { href: '/trainer/plans', label: 'Plans', icon: <CalendarDays className="h-4 w-4" /> },
     ],

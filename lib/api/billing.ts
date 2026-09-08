@@ -233,8 +233,22 @@ export interface SendNotificationResult {
 // Scheduled sessions
 // ============================================================================
 
+/**
+ * Statuses a coach may PATCH a session into directly.
+ *
+ * The booking-flow statuses live in `ScheduleStatusAll` instead of here on
+ * purpose: they are only ever written by the dedicated request/approve/
+ * decline/pay endpoints, never by `PATCH /api/scheduled-sessions/{id}`.
+ */
 export type ScheduleStatus =
   | 'scheduled' | 'confirmed' | 'completed' | 'no_show' | 'cancelled';
+
+/** Every status a `scheduled_sessions` row can hold (migrations 005 + 042). */
+export type ScheduleStatusAll =
+  | ScheduleStatus
+  | 'pending_approval'
+  | 'awaiting_payment'
+  | 'declined';
 
 export interface ScheduledSessionRow {
   id: string;
