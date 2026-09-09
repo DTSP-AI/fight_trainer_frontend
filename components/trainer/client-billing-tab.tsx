@@ -1,0 +1,861 @@
+'use client';
+
+import { useCallback, useEffect, useState } from 'react';
+import Link from 'next/link';
+import { Copy, Send, ExternalLink, Plus, Wallet } from 'lucide-react';
+import { toast } from 'sonner';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
+import { Badge } from '@/components/ui/badge';
+import { LoadingState } from '@/components/common/loading-state';
+import { EmptyState } from '@/components/common/empty-state';
+import {
+  billingApi,
+  type InvoiceRow,
+  type PackageRow,
+  type ServiceRow,
+} from '@/lib/api/billing';
+import { studentsApi } from '@/lib/api/students';
+import { describeApiError } from '@/lib/api';
+import { SharedStudentPicker } from './shared-student-picker';
+import type { Student } from '@/lib/types';
+
+// Stripe is deliberately absent: those payments are recorded by webhook, and
+// the backend rejects method='stripe' on this route.
+const OFF_STRIPE_METHODS = ['venmo', 'zelle', 'cash', 'other'] as const;
+type OffStripeMethod = (typeof OFF_STRIPE_METHODS)[number];
+
+function fmtCents(cents: number): string {
+  return new Intl.NumberFormat('en-US', {
+    style: 'currency',
+    currency: 'USD',
+  }).format(cents / 100);
+}
+
+function fmtDate(iso?: string | null): string {
+  if (!iso) return '—';
+  try {
+    return new Date(iso).toLocaleDateString();
+  } catch {
+    return iso;
+  }
+}
+
+/**
+ * Packages, custom pricing, invoices, payment status — the Billing tab of
+ * the Client Workspace. Lifted verbatim from the old
+ * /trainer/students/[id]/billing page (now a redirect to ?tab=billing).
+ * `onChanged` lets the workspace refresh its balance strip after money moves.
+ */
+export function ClientBillingTab({
+  studentId,
+  onChanged,
+}: {
+  studentId: string;
+  onChanged?: () => void;
+}) {
+  const [services, setServices] = useState<ServiceRow[]>([]);
+  const [packages, setPackages] = useState<PackageRow[]>([]);
+  const [invoices, setInvoices] = useState<InvoiceRow[]>([]);
+  const [roster, setRoster] = useState<Student[]>([]);
+  const [loaded, setLoaded] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const refresh = useCallback(async () => {
+    try {
+      const [svcs, pkgs, invs, all] = await Promise.all([
+        billingApi.listServices(),
+        billingApi.listPackages(studentId),
+        billingApi.listInvoices({ student_id: studentId }),
+        studentsApi.list(),
+      ]);
+      setServices(svcs);
+      setPackages(pkgs);
+      setInvoices(invs);
+      setRoster(all);
+      setLoaded(true);
+    } catch (err) {
+      setError(describeApiError(err));
+    }
+  }, [studentId]);
+
+  const refreshAndNotify = useCallback(async () => {
+    await refresh();
+    onChanged?.();
+  }, [refresh, onChanged]);
+
+  useEffect(() => {
+    if (!studentId) return;
+    // Wrapped so the loader's setState calls land in a promise callback
+    // rather than synchronously in the effect body.
+    void (async () => {
+      await refresh();
+    })();
+  }, [studentId, refresh]);
+
+  if (error) {
+    return (
+      <p className="rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive">
+        {error}
+      </p>
+    );
+  }
+  if (!loaded) return <LoadingState />;
+
+  return (
+    <div className="space-y-6">
+      <NewPackageForm
+        services={services}
+        studentId={studentId}
+        roster={roster}
+        onCreated={refreshAndNotify}
+      />
+
+      <PackagesPanel
+        packages={packages}
+        services={services}
+        roster={roster}
+        studentId={studentId}
+        onRefresh={refreshAndNotify}
+      />
+
+      <NewInvoiceForm
+        studentId={studentId}
+        packages={packages}
+        onCreated={refreshAndNotify}
+      />
+
+      <InvoicesPanel invoices={invoices} onRefresh={refreshAndNotify} />
+    </div>
+  );
+}
+
+// ----------------------------------------------------------------------------
+// New package form
+// ----------------------------------------------------------------------------
+
+function NewPackageForm({
+  services,
+  studentId,
+  roster,
+  onCreated,
+}: {
+  services: ServiceRow[];
+  studentId: string;
+  roster: Student[];
+  onCreated: () => void;
+}) {
+  const [serviceId, setServiceId] = useState('');
+  const [totalSessions, setTotalSessions] = useState('10');
+  const [pricePerSession, setPricePerSession] = useState('80');
+  const [notes, setNotes] = useState('');
+  const [sharedIds, setSharedIds] = useState<string[]>([]);
+  const [submitting, setSubmitting] = useState(false);
+  const [open, setOpen] = useState(false);
+
+  function toggleShared(id: string, on: boolean) {
+    setSharedIds((prev) =>
+      on ? (prev.includes(id) ? prev : [...prev, id]) : prev.filter((x) => x !== id),
+    );
+  }
+
+  const total =
+    Number(totalSessions || 0) * Number(pricePerSession || 0);
+
+  async function submit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!serviceId) {
+      toast.error('Pick a service');
+      return;
+    }
+    setSubmitting(true);
+    try {
+      await billingApi.createPackage(studentId, {
+        student_id: studentId,
+        service_id: serviceId,
+        total_sessions: Number(totalSessions),
+        price_per_session_cents: Math.round(Number(pricePerSession) * 100),
+        notes: notes || undefined,
+        shared_student_ids: sharedIds,
+      });
+      toast.success('Package created');
+      setOpen(false);
+      setNotes('');
+      setSharedIds([]);
+      onCreated();
+    } catch (err) {
+      toast.error(describeApiError(err));
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  if (!open) {
+    return (
+      <Button onClick={() => setOpen(true)} variant="outline">
+        <Plus className="h-4 w-4" />
+        New package
+      </Button>
+    );
+  }
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-lg">New package</CardTitle>
+      </CardHeader>
+      <CardContent>
+        <form onSubmit={submit} className="space-y-4">
+          <div className="grid gap-4 md:grid-cols-2">
+            <div className="space-y-2">
+              <Label>Service</Label>
+              <select
+                className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+                value={serviceId}
+                onChange={(e) => setServiceId(e.target.value)}
+                required
+              >
+                <option value="">Pick a service…</option>
+                {services.map((s) => (
+                  <option key={s.id} value={s.id}>
+                    {s.name} ({fmtCents(s.default_price_cents)} default)
+                  </option>
+                ))}
+              </select>
+              {services.length === 0 ? (
+                <p className="text-xs text-muted-foreground">
+                  No services yet — create one in <Link href="/trainer/services" className="underline">Services</Link>.
+                </p>
+              ) : null}
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="total_sessions">Total sessions</Label>
+              <Input
+                id="total_sessions"
+                type="number"
+                min={1}
+                value={totalSessions}
+                onChange={(e) => setTotalSessions(e.target.value)}
+                required
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="price_per_session">$ per session</Label>
+              <Input
+                id="price_per_session"
+                type="number"
+                step="0.01"
+                min={0}
+                value={pricePerSession}
+                onChange={(e) => setPricePerSession(e.target.value)}
+                required
+              />
+              <p className="text-xs text-muted-foreground">
+                Total: <strong>{fmtCents(total * 100)}</strong>
+              </p>
+            </div>
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="notes">Notes (off-app context)</Label>
+            <Textarea
+              id="notes"
+              rows={2}
+              placeholder="agreed at $80/session over coffee 2026-04-15"
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
+            />
+          </div>
+          <SharedStudentPicker
+            students={roster}
+            ownerId={studentId}
+            selected={sharedIds}
+            onToggle={toggleShared}
+          />
+          <div className="flex gap-2">
+            <Button type="submit" disabled={submitting}>
+              {submitting ? 'Creating…' : 'Create package'}
+            </Button>
+            <Button type="button" variant="ghost" onClick={() => setOpen(false)}>
+              Cancel
+            </Button>
+          </div>
+        </form>
+      </CardContent>
+    </Card>
+  );
+}
+
+// ----------------------------------------------------------------------------
+// Packages list panel
+// ----------------------------------------------------------------------------
+
+function PackagesPanel({
+  packages,
+  services,
+  roster,
+  studentId,
+  onRefresh,
+}: {
+  packages: PackageRow[];
+  services: ServiceRow[];
+  roster: Student[];
+  studentId: string;
+  onRefresh: () => void;
+}) {
+  const nameOf = (id: string) =>
+    roster.find((s) => s.id === id)?.full_name ?? '(student)';
+  if (packages.length === 0) {
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-lg">Packages</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <EmptyState
+            title="No packages yet"
+            description="Create a package above to start invoicing this student."
+          />
+        </CardContent>
+      </Card>
+    );
+  }
+
+  const serviceMap = new Map(services.map((s) => [s.id, s]));
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-lg">Packages ({packages.length})</CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        {packages.map((p) => {
+          const svc = serviceMap.get(p.service_id);
+          return (
+            <div
+              key={p.id}
+              className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-border bg-card/60 p-4"
+            >
+              <div className="min-w-0 flex-1">
+                <div className="text-sm font-semibold">
+                  {svc?.name ?? 'Package'} · {p.total_sessions} sessions @{' '}
+                  {fmtCents(p.price_per_session_cents)}
+                </div>
+                <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                  <Badge variant={p.status === 'active' ? 'default' : 'secondary'}>
+                    {p.status}
+                  </Badge>
+                  <Badge
+                    variant={
+                      p.payment_status === 'paid'
+                        ? 'default'
+                        : p.payment_status === 'partial'
+                          ? 'outline'
+                          : 'secondary'
+                    }
+                  >
+                    {p.payment_status}
+                  </Badge>
+                  <span>·</span>
+                  <span>
+                    {p.sessions_remaining}/{p.total_sessions} left
+                  </span>
+                  <span>·</span>
+                  <span>
+                    {fmtCents(p.amount_paid_cents)} / {fmtCents(p.total_price_cents)}
+                  </span>
+                  {p.expires_at ? (
+                    <>
+                      <span>·</span>
+                      <span>expires {fmtDate(p.expires_at)}</span>
+                    </>
+                  ) : null}
+                </div>
+                {p.student_id !== studentId ? (
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    Shared from {nameOf(p.student_id)}&apos;s package
+                  </p>
+                ) : (p.shared_student_ids ?? []).length > 0 ? (
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    Shared with{' '}
+                    {(p.shared_student_ids ?? []).map(nameOf).join(', ')}
+                  </p>
+                ) : null}
+                {p.notes ? (
+                  <p className="mt-1 text-xs italic text-muted-foreground">
+                    {p.notes}
+                  </p>
+                ) : null}
+              </div>
+              <RecordPaymentButton pkg={p} onRecorded={onRefresh} />
+            </div>
+          );
+        })}
+      </CardContent>
+    </Card>
+  );
+}
+
+function RecordPaymentButton({
+  pkg,
+  onRecorded,
+}: {
+  pkg: PackageRow;
+  onRecorded: () => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const due = Math.max(pkg.total_price_cents - pkg.amount_paid_cents, 0);
+  const [amount, setAmount] = useState((due / 100).toFixed(2));
+  const [method, setMethod] = useState<'venmo' | 'zelle' | 'cash' | 'other'>('venmo');
+  const [reference, setReference] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+
+  if (pkg.payment_status === 'paid' && due === 0) return null;
+
+  if (!open) {
+    return (
+      <Button size="sm" onClick={() => setOpen(true)}>
+        Record payment
+      </Button>
+    );
+  }
+
+  async function submit() {
+    setSubmitting(true);
+    try {
+      await billingApi.recordManualPayment(pkg.id, {
+        amount_cents: Math.round(Number(amount) * 100),
+        method,
+        external_reference: reference || undefined,
+      });
+      toast.success('Payment recorded');
+      setOpen(false);
+      onRecorded();
+    } catch (err) {
+      toast.error(describeApiError(err));
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  return (
+    <div className="flex flex-wrap items-end gap-2 rounded-md border border-border bg-background/60 p-3">
+      <div className="space-y-1">
+        <Label className="text-xs">Amount</Label>
+        <Input
+          type="number"
+          step="0.01"
+          className="w-24"
+          value={amount}
+          onChange={(e) => setAmount(e.target.value)}
+        />
+      </div>
+      <div className="space-y-1">
+        <Label className="text-xs">Method</Label>
+        <select
+          className="h-10 rounded-md border border-input bg-background px-2 text-sm"
+          value={method}
+          onChange={(e) => setMethod(e.target.value as typeof method)}
+        >
+          <option value="venmo">Venmo</option>
+          <option value="zelle">Zelle</option>
+          <option value="cash">Cash</option>
+          <option value="other">Other</option>
+        </select>
+      </div>
+      <div className="flex-1 space-y-1 min-w-[140px]">
+        <Label className="text-xs">Reference (optional)</Label>
+        <Input
+          placeholder="@handle / confirm #"
+          value={reference}
+          onChange={(e) => setReference(e.target.value)}
+        />
+      </div>
+      <Button size="sm" onClick={submit} disabled={submitting}>
+        {submitting ? 'Saving…' : 'Save'}
+      </Button>
+      <Button size="sm" variant="ghost" onClick={() => setOpen(false)}>
+        Cancel
+      </Button>
+    </div>
+  );
+}
+
+// ----------------------------------------------------------------------------
+// New invoice form
+// ----------------------------------------------------------------------------
+
+function NewInvoiceForm({
+  studentId,
+  packages,
+  onCreated,
+}: {
+  studentId: string;
+  packages: PackageRow[];
+  onCreated: () => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [packageId, setPackageId] = useState('');
+  const [description, setDescription] = useState('');
+  const [amount, setAmount] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+
+  async function submit(e: React.FormEvent) {
+    e.preventDefault();
+    setSubmitting(true);
+    try {
+      await billingApi.createInvoice({
+        student_id: studentId,
+        package_id: packageId || undefined,
+        description: description.trim(),
+        amount_cents: Math.round(Number(amount) * 100),
+      });
+      toast.success('Invoice created');
+      setOpen(false);
+      setDescription('');
+      setAmount('');
+      setPackageId('');
+      onCreated();
+    } catch (err) {
+      toast.error(describeApiError(err));
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  function attachPackage(pid: string) {
+    setPackageId(pid);
+    const p = packages.find((x) => x.id === pid);
+    if (p) {
+      const due = Math.max(p.total_price_cents - p.amount_paid_cents, 0);
+      setAmount((due / 100).toFixed(2));
+      setDescription(`Training package — ${p.total_sessions} sessions`);
+    }
+  }
+
+  if (!open) {
+    return (
+      <Button onClick={() => setOpen(true)} variant="outline">
+        <Plus className="h-4 w-4" />
+        New invoice
+      </Button>
+    );
+  }
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-lg">New invoice</CardTitle>
+      </CardHeader>
+      <CardContent>
+        <form onSubmit={submit} className="space-y-4">
+          {packages.length > 0 ? (
+            <div className="space-y-2">
+              <Label>Attach to package (optional)</Label>
+              <select
+                className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+                value={packageId}
+                onChange={(e) => attachPackage(e.target.value)}
+              >
+                <option value="">— none (ad-hoc invoice) —</option>
+                {packages.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.total_sessions} sessions · {fmtCents(p.total_price_cents)} ·{' '}
+                    {p.payment_status}
+                  </option>
+                ))}
+              </select>
+              <p className="text-xs text-muted-foreground">
+                Picking a package prefills amount + description.
+              </p>
+            </div>
+          ) : null}
+          <div className="space-y-2">
+            <Label htmlFor="description">Description</Label>
+            <Input
+              id="description"
+              placeholder="10x Private MMA sessions @ $80/each"
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              required
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="amount">Amount</Label>
+            <Input
+              id="amount"
+              type="number"
+              step="0.01"
+              min={0}
+              value={amount}
+              onChange={(e) => setAmount(e.target.value)}
+              required
+            />
+          </div>
+          <div className="flex gap-2">
+            <Button type="submit" disabled={submitting}>
+              {submitting ? 'Creating…' : 'Create invoice'}
+            </Button>
+            <Button type="button" variant="ghost" onClick={() => setOpen(false)}>
+              Cancel
+            </Button>
+          </div>
+        </form>
+      </CardContent>
+    </Card>
+  );
+}
+
+// ----------------------------------------------------------------------------
+// Invoices panel
+// ----------------------------------------------------------------------------
+
+function InvoicesPanel({
+  invoices,
+  onRefresh,
+}: {
+  invoices: InvoiceRow[];
+  onRefresh: () => void;
+}) {
+  if (invoices.length === 0) {
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-lg">Invoices</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <EmptyState title="No invoices yet" />
+        </CardContent>
+      </Card>
+    );
+  }
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-lg">Invoices ({invoices.length})</CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        {invoices.map((inv) => (
+          <InvoiceRowItem key={inv.id} inv={inv} onRefresh={onRefresh} />
+        ))}
+      </CardContent>
+    </Card>
+  );
+}
+
+function InvoiceRowItem({
+  inv,
+  onRefresh,
+}: {
+  inv: InvoiceRow;
+  onRefresh: () => void;
+}) {
+  const [sending, setSending] = useState(false);
+  const [recording, setRecording] = useState(false);
+  const [showRecord, setShowRecord] = useState(false);
+  const due = Math.max(inv.amount_cents - inv.amount_paid_cents, 0);
+  // Default to the outstanding balance — settling in full is the common case.
+  const [payAmount, setPayAmount] = useState((due / 100).toFixed(2));
+  const [payMethod, setPayMethod] = useState<OffStripeMethod>('venmo');
+  const [payReference, setPayReference] = useState('');
+  const closed = inv.status === 'paid' || inv.status === 'cancelled' || due <= 0;
+  const publicUrl =
+    inv.public_url ??
+    (typeof window !== 'undefined'
+      ? `${window.location.origin}/invoice/${inv.public_token}`
+      : '');
+
+  async function send() {
+    setSending(true);
+    try {
+      const res = await billingApi.sendInvoice(inv.id);
+      if (res.delivery.status === 'sent') {
+        toast.success('Invoice emailed to student');
+      } else if (res.delivery.status === 'skipped') {
+        toast(`Email service not configured — copy the link below`, {
+          description: 'RESEND_API_KEY env var unset on backend.',
+        });
+      } else {
+        toast.error(res.delivery.error ?? 'Email send failed');
+      }
+      onRefresh();
+    } catch (err) {
+      toast.error(describeApiError(err));
+    } finally {
+      setSending(false);
+    }
+  }
+
+  async function copyLink() {
+    try {
+      await navigator.clipboard.writeText(publicUrl);
+      toast.success('Public invoice link copied');
+    } catch {
+      toast.error('Could not copy');
+    }
+  }
+
+  async function recordPayment(e: React.FormEvent) {
+    e.preventDefault();
+    const cents = Math.round(Number(payAmount) * 100);
+    if (!Number.isFinite(cents) || cents <= 0) {
+      toast.error('Enter an amount');
+      return;
+    }
+    if (cents > due) {
+      // Mirrors the backend OVERPAYMENT guard so the coach gets the answer
+      // without a round trip.
+      toast.error(`That is more than the ${fmtCents(due)} outstanding`);
+      return;
+    }
+    setRecording(true);
+    try {
+      const res = await billingApi.recordInvoicePayment(inv.id, {
+        amount_cents: cents,
+        method: payMethod,
+        external_reference: payReference.trim() || undefined,
+      });
+      toast.success(
+        res.balance_after_cents > 0
+          ? `Recorded — ${fmtCents(res.balance_after_cents)} still due`
+          : 'Invoice settled',
+      );
+      setShowRecord(false);
+      setPayReference('');
+      onRefresh();
+    } catch (err) {
+      toast.error(describeApiError(err));
+    } finally {
+      setRecording(false);
+    }
+  }
+
+  return (
+    <div className="rounded-md border border-border bg-card/60 p-4">
+      <div className="flex flex-wrap items-baseline justify-between gap-2">
+        <div className="text-sm font-semibold">{inv.description}</div>
+        <Badge
+          variant={
+            inv.status === 'paid'
+              ? 'default'
+              : inv.status === 'cancelled'
+                ? 'secondary'
+                : 'outline'
+          }
+          className="capitalize"
+        >
+          {inv.status}
+        </Badge>
+      </div>
+      <div className="mt-1 flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
+        <span className="font-mono">
+          {fmtCents(due)} due / {fmtCents(inv.amount_cents)}
+        </span>
+        {inv.due_date ? <span>· due {fmtDate(inv.due_date)}</span> : null}
+        {inv.viewed_at ? <span>· viewed {fmtDate(inv.viewed_at)}</span> : null}
+        {inv.sent_at ? <span>· sent {fmtDate(inv.sent_at)}</span> : null}
+      </div>
+      <div className="mt-3 flex flex-wrap gap-2">
+        <Button size="sm" onClick={send} disabled={sending}>
+          <Send className="h-4 w-4" />
+          {sending ? 'Sending…' : 'Email link'}
+        </Button>
+        <Button size="sm" variant="outline" onClick={copyLink}>
+          <Copy className="h-4 w-4" />
+          Copy link
+        </Button>
+        <Button asChild size="sm" variant="ghost">
+          <a href={publicUrl} target="_blank" rel="noreferrer">
+            <ExternalLink className="h-4 w-4" />
+            Open
+          </a>
+        </Button>
+        {closed ? null : (
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => setShowRecord((v) => !v)}
+          >
+            <Wallet className="h-4 w-4" />
+            Record payment
+          </Button>
+        )}
+      </div>
+      {showRecord ? (
+        <form
+          onSubmit={recordPayment}
+          className="mt-3 space-y-3 rounded-md border border-border bg-background/60 p-3"
+        >
+          <p className="text-xs text-muted-foreground">
+            Money you received outside Stripe. Stripe payments record themselves.
+          </p>
+          <div className="flex flex-wrap gap-3">
+            <div className="space-y-1">
+              <Label htmlFor={`pay-amount-${inv.id}`} className="text-xs">
+                Amount
+              </Label>
+              <Input
+                id={`pay-amount-${inv.id}`}
+                type="number"
+                step="0.01"
+                min={0.01}
+                max={due / 100}
+                value={payAmount}
+                onChange={(e) => setPayAmount(e.target.value)}
+                className="w-32"
+                required
+              />
+            </div>
+            <div className="space-y-1">
+              <Label htmlFor={`pay-method-${inv.id}`} className="text-xs">
+                Method
+              </Label>
+              <select
+                id={`pay-method-${inv.id}`}
+                className="h-10 rounded-md border border-input bg-background px-3 text-sm"
+                value={payMethod}
+                onChange={(e) =>
+                  setPayMethod(e.target.value as OffStripeMethod)
+                }
+              >
+                {OFF_STRIPE_METHODS.map((m) => (
+                  <option key={m} value={m}>
+                    {m}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="space-y-1">
+              <Label htmlFor={`pay-ref-${inv.id}`} className="text-xs">
+                Reference (optional)
+              </Label>
+              <Input
+                id={`pay-ref-${inv.id}`}
+                placeholder="confirmation #"
+                value={payReference}
+                onChange={(e) => setPayReference(e.target.value)}
+                className="w-44"
+              />
+            </div>
+          </div>
+          <div className="flex gap-2">
+            <Button type="submit" size="sm" disabled={recording}>
+              {recording ? 'Recording…' : 'Record payment'}
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              variant="ghost"
+              onClick={() => setShowRecord(false)}
+            >
+              Cancel
+            </Button>
+          </div>
+        </form>
+      ) : null}
+    </div>
+  );
+}
