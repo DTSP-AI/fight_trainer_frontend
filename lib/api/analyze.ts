@@ -80,6 +80,11 @@ export const analyzeApi = {
       { message },
     ),
 
+  delete: (analysisId: string) =>
+    apiClient.delete<{ deleted: boolean; id: string }>(
+      `/api/analysis/${encodeURIComponent(analysisId)}`,
+    ),
+
   messages: (analysisId: string) =>
     apiClient.get<ChatMessage[]>(
       `/api/analysis/${encodeURIComponent(analysisId)}/messages`,

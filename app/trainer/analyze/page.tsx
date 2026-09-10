@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { ArrowRight, Film, Sparkles } from 'lucide-react';
+import { ArrowRight, Film, Sparkles, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -36,6 +36,23 @@ export default function AnalyzePage() {
   const [students, setStudents] = useState<Student[] | null>(null);
   const [analyses, setAnalyses] = useState<AnalysisListRow[] | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+
+  async function deleteAnalysis(id: string) {
+    if (!window.confirm('Delete this breakdown? Its chat and graph links go with it. This cannot be undone.')) {
+      return;
+    }
+    setDeletingId(id);
+    try {
+      await analyzeApi.delete(id);
+      setAnalyses((prev) => (prev ? prev.filter((a) => a.id !== id) : prev));
+      toast.success('Breakdown deleted');
+    } catch (err) {
+      toast.error(describeApiError(err));
+    } finally {
+      setDeletingId(null);
+    }
+  }
 
   useEffect(() => {
     let cancelled = false;
@@ -151,10 +168,22 @@ export default function AnalyzePage() {
         ) : (
           <ul className="space-y-2">
             {analyses.map((a) => (
-              <li key={a.id}>
+              <li key={a.id} className="relative">
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  aria-label="Delete breakdown"
+                  title="Delete this breakdown"
+                  disabled={deletingId === a.id}
+                  onClick={() => void deleteAnalysis(a.id)}
+                  className="absolute right-2 top-2 z-10 text-rose-300 hover:bg-rose-500/10 hover:text-rose-200"
+                >
+                  <Trash2 className="h-4 w-4" />
+                </Button>
                 <Link
                   href={`/trainer/analyze/${a.id}`}
-                  className="group block rounded-lg border border-border bg-card p-4 transition-colors hover:border-primary/40"
+                  className="group block rounded-lg border border-border bg-card p-4 pr-12 transition-colors hover:border-primary/40"
                 >
                   <div className="flex items-start justify-between gap-4">
                     <div className="min-w-0 flex-1">
