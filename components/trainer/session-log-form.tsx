@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useForm, useWatch } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -20,6 +20,7 @@ import {
 } from '@/components/ui/select';
 import { studentsApi } from '@/lib/api/students';
 import { sessionsApi } from '@/lib/api/sessions';
+import { billingApi, type PackageRow, type ServiceRow } from '@/lib/api/billing';
 import { describeApiError } from '@/lib/api';
 import type { Student } from '@/lib/types';
 
@@ -34,6 +35,9 @@ const schema = z.object({
   voice_transcript: z.string().optional(),
   sparring_rounds_count: z.string().optional(),
   student_self_rating: z.string().optional(),
+  // Walk-in lane (D1) — how this session is paid for when it wasn't booked.
+  // 'pkg:<id>' burns a credit, 'svc:<id>' is a drop-in at the list price.
+  funding: z.string().optional(),
 });
 
 type FormValues = z.infer<typeof schema>;
@@ -46,6 +50,10 @@ function toNumOrNull(v: string | undefined): number | null {
 
 const today = () => new Date().toISOString().slice(0, 10);
 
+function fmtCents(cents: number): string {
+  return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(cents / 100);
+}
+
 export function SessionLogForm() {
   const router = useRouter();
   const params = useSearchParams();
@@ -55,6 +63,8 @@ export function SessionLogForm() {
   const plannedSessionId = params.get('plannedSessionId');
 
   const [students, setStudents] = useState<Student[] | null>(null);
+  const [services, setServices] = useState<ServiceRow[]>([]);
+  const [packages, setPackages] = useState<PackageRow[]>([]);
   const [submitting, setSubmitting] = useState(false);
   const [expanded, setExpanded] = useState(false);
 
@@ -73,6 +83,7 @@ export function SessionLogForm() {
   });
 
   const studentId = useWatch({ control, name: 'student_id' });
+  const funding = useWatch({ control, name: 'funding' });
   const notes = useWatch({ control, name: 'notes' });
   const cues = useWatch({ control, name: 'coaching_cues' });
   const transcript = useWatch({ control, name: 'voice_transcript' });
@@ -90,7 +101,78 @@ export function SessionLogForm() {
     };
   }, []);
 
+  // A walk-in (no booking) must land on the client's ledger with a payment
+  // state, so the form needs the packages and services to pick from. Booked
+  // sessions already carry theirs — skip the fetch.
+  const isWalkIn = !scheduledSessionId;
+  useEffect(() => {
+    if (!isWalkIn) return;
+    let cancelled = false;
+    Promise.all([billingApi.listServices(), billingApi.listAllPackages('active')])
+      .then(([svcs, pkgs]) => {
+        if (cancelled) return;
+        setServices(svcs);
+        setPackages(pkgs);
+      })
+      .catch((err: unknown) => toast.error(describeApiError(err)));
+    return () => {
+      cancelled = true;
+    };
+  }, [isWalkIn]);
+
+  const fundingOptions = useMemo(() => {
+    if (!isWalkIn || !studentId) return [];
+    const pkgs = packages.filter(
+      (p) =>
+        (p.student_id === studentId || (p.shared_student_ids ?? []).includes(studentId)) &&
+        p.status === 'active' &&
+        p.sessions_remaining > 0,
+    );
+    const svcById = new Map(services.map((sv) => [sv.id, sv]));
+    return [
+      ...pkgs.map((p) => ({
+        value: `pkg:${p.id}`,
+        label: `${svcById.get(p.service_id)?.name ?? 'Package'} · ${p.sessions_remaining}/${p.total_sessions} credits${
+          p.payment_status !== 'paid' ? ' · package unpaid' : ''
+        }`,
+      })),
+      ...services
+        .filter((sv) => sv.is_active)
+        .map((sv) => ({
+          value: `svc:${sv.id}`,
+          label: `Drop-in · ${sv.name} · ${fmtCents(sv.default_price_cents)}`,
+        })),
+    ];
+  }, [isWalkIn, studentId, packages, services]);
+
+  // Default to the first package with credit once the options exist —
+  // derived during render, not assigned from an effect.
+  const [autoPickedFor, setAutoPickedFor] = useState<string | null>(null);
+  if (isWalkIn && studentId && fundingOptions.length > 0 && autoPickedFor !== studentId) {
+    setAutoPickedFor(studentId);
+    const first = fundingOptions[0];
+    if (first && (!funding || !fundingOptions.some((o) => o.value === funding))) {
+      setValue('funding', first.value);
+    }
+  }
+
+  function walkInPayload(f: string | undefined) {
+    if (!isWalkIn || !f) return null;
+    if (f.startsWith('pkg:')) {
+      const pkg = packages.find((p) => p.id === f.slice(4));
+      if (!pkg) return null;
+      return { service_id: pkg.service_id, package_id: pkg.id };
+    }
+    if (f.startsWith('svc:')) return { service_id: f.slice(4), package_id: null };
+    return null;
+  }
+
   async function onSubmit(values: FormValues) {
+    const walkIn = walkInPayload(values.funding);
+    if (isWalkIn && fundingOptions.length > 0 && !walkIn) {
+      toast.error('Pick how this session is paid for.');
+      return;
+    }
     setSubmitting(true);
     try {
       // If the trainer didn't fill any AI signal (notes/cues/transcript),
@@ -113,6 +195,7 @@ export function SessionLogForm() {
         scheduled_session_id: scheduledSessionId || null,
         planned_session_id: plannedSessionId || null,
         quick_log: !hasSignal,
+        walk_in: walkIn,
       });
       toast.success(
         hasSignal ? 'Logged. Pipeline kicked off.' : 'Marked logged.',
@@ -175,6 +258,34 @@ export function SessionLogForm() {
           />
         </div>
       </div>
+
+      {isWalkIn && studentId && fundingOptions.length > 0 ? (
+        <div className="grid gap-2">
+          <Label>Paid how?</Label>
+          <Select value={funding ?? ''} onValueChange={(v) => setValue('funding', v)}>
+            <SelectTrigger>
+              <SelectValue placeholder="Pick a package or drop-in" />
+            </SelectTrigger>
+            <SelectContent>
+              {fundingOptions.map((o) => (
+                <SelectItem key={o.value} value={o.value}>
+                  {o.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <p className="text-xs text-muted-foreground">
+            A walk-in still lands on the client&apos;s ledger: a package burns one credit, a drop-in
+            shows as owed until you mark it paid.
+          </p>
+        </div>
+      ) : null}
+      {isWalkIn && studentId && fundingOptions.length === 0 && services.length > 0 ? (
+        <p className="rounded-md border border-amber-500/40 bg-amber-500/10 p-3 text-xs text-amber-100">
+          No active service or package to charge this to — the session will be logged without a
+          ledger row. Set up a service under Settings first.
+        </p>
+      ) : null}
 
       {/* Everything else hidden by default. */}
       <button

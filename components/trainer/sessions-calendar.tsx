@@ -29,23 +29,14 @@ import {
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
 import { AssistedTextarea } from '@/components/common/assisted-textarea';
 import { ScheduleLegend } from '@/components/common/schedule-legend';
 import { cn } from '@/lib/utils';
 import {
   billingApi,
   type PackageRow,
-  type ScheduleStatus,
 } from '@/lib/api/billing';
 import {
-  bookingApi,
   type ApproveBody,
   type AvailableSlot,
   type CalendarEvent,
@@ -54,8 +45,8 @@ import {
   type ScheduledEvent,
 } from '@/lib/api/calendar';
 import { plansApi } from '@/lib/api/plans';
-import { sessionsApi } from '@/lib/api/sessions';
-import { ApiClientError, describeApiError } from '@/lib/api';
+import { describeApiError } from '@/lib/api';
+import { MarkPaidFields, useBookingActions } from './ledger-row-actions';
 import {
   STATUS_LABEL,
   TONES,
@@ -172,8 +163,6 @@ interface ServiceLite {
   id: string;
   name: string;
 }
-
-const MARK_PAID_METHODS: MarkPaidMethod[] = ['cash', 'venmo', 'zelle', 'other'];
 
 function eventLabel(ev: CalendarEvent, student?: Student): string {
   const name = student?.full_name ?? '(unknown)';
@@ -501,13 +490,16 @@ function EventDetailDialog({
   onCancelRequest?: (ev: ScheduledEvent) => void;
 }) {
   const router = useRouter();
-  const [busy, setBusy] = useState(false);
   const [editing, setEditing] = useState(false);
   const [panel, setPanel] = useState<Panel>('none');
   const [method, setMethod] = useState<MarkPaidMethod>('cash');
   const [payNotes, setPayNotes] = useState('');
   const [declineReason, setDeclineReason] = useState('');
   const [packageExhausted, setPackageExhausted] = useState(false);
+  // One implementation of every coach action — shared with the session
+  // ledger on the Client Workspace so the two can never disagree.
+  const actions = useBookingActions({ onChanged, studentName: student?.full_name });
+  const busy = actions.busy;
 
   if (!event) return null;
 
@@ -526,166 +518,69 @@ function EventDetailDialog({
     setPackageExhausted(false);
   }
 
-  async function setStatus(next: ScheduleStatus, label: string) {
+  async function setStatus(next: 'no_show' | 'cancelled') {
     if (!scheduled) return;
-    setBusy(true);
-    try {
-      await billingApi.updateSchedule(scheduled.id, { status: next });
-      toast.success(label);
-      onChanged();
-    } catch (err) {
-      toast.error(describeApiError(err));
-    } finally {
-      setBusy(false);
-    }
+    await actions.setStatus(scheduled.id, next);
   }
 
   async function approve(body: ApproveBody) {
     if (!scheduled) return;
-    setBusy(true);
-    try {
-      const res = await bookingApi.approve(scheduled.id, body);
-      if (res.checkout_url) {
-        toast.success('Approved — awaiting payment', {
-          description: 'The client got a pay link. It locks in once paid.',
-        });
-      } else {
-        toast.success("Approved — locked in");
-      }
+    const result = await actions.approve(scheduled.id, body);
+    if (result === 'exhausted') {
+      setPackageExhausted(true);
+      setPanel('approve');
+    } else if (result === 'ok') {
       resetPanels();
-      onChanged();
-    } catch (err) {
-      if (err instanceof ApiClientError && err.code === 'PACKAGE_EXHAUSTED') {
-        setPackageExhausted(true);
-        setPanel('approve');
-        toast.error('That package is out of credits.', {
-          description: 'Approve as a drop-in, or sell a new package first.',
-        });
-      } else {
-        toast.error(describeApiError(err));
-      }
-    } finally {
-      setBusy(false);
     }
   }
 
   async function decline() {
     if (!scheduled) return;
-    setBusy(true);
-    try {
-      await bookingApi.decline(
-        scheduled.id,
-        declineReason.trim() ? { reason: declineReason.trim() } : {},
-      );
-      toast.success('Request declined');
-      resetPanels();
-      onChanged();
-    } catch (err) {
-      toast.error(describeApiError(err));
-    } finally {
-      setBusy(false);
-    }
+    await actions.decline(scheduled.id, declineReason);
+    resetPanels();
   }
 
   async function waivePayment() {
     if (!scheduled) return;
-    setBusy(true);
-    try {
-      await bookingApi.waivePayment(scheduled.id);
-      toast.success('Payment waived — locked in');
-      resetPanels();
-      onChanged();
-    } catch (err) {
-      toast.error(describeApiError(err));
-    } finally {
-      setBusy(false);
-    }
+    await actions.waivePayment(scheduled.id);
+    resetPanels();
   }
 
   async function markPaid() {
     if (!scheduled) return;
-    setBusy(true);
-    try {
-      await bookingApi.markPaid(scheduled.id, {
-        method,
-        ...(payNotes.trim() ? { notes: payNotes.trim() } : {}),
-      });
-      toast.success('Payment recorded — locked in');
-      resetPanels();
-      onChanged();
-    } catch (err) {
-      toast.error(describeApiError(err));
-    } finally {
-      setBusy(false);
-    }
+    await actions.markPaid(scheduled.id, method, payNotes);
+    resetPanels();
   }
 
   async function remind() {
     if (!scheduled) return;
-    setBusy(true);
-    try {
-      const res = await billingApi.remindStudent(scheduled.id);
-      if (res.status === 'sent') {
-        toast.success(`Reminder sent to ${student?.full_name ?? 'student'}`);
-      } else if (res.status === 'skipped') {
-        toast(`Email service not configured`, {
-          description:
-            'Set RESEND_API_KEY on the backend to deliver reminders.',
-        });
-      } else {
-        toast.error(res.error ?? 'Reminder failed');
-      }
-    } catch (err) {
-      toast.error(describeApiError(err));
-    } finally {
-      setBusy(false);
-    }
+    await actions.remind(scheduled.id);
   }
 
   async function markDone() {
     if (!event) return;
-    setBusy(true);
-    try {
-      // Canonical fulfillment path — POST /api/sessions with quick_log=true
-      // and the appropriate linkage. Backend marks the source row fulfilled.
-      await sessionsApi.create({
-        student_id: event.student_id,
-        session_date: event.starts_at.slice(0, 10),
-        duration_minutes: event.duration_minutes ?? null,
-        mode: 'text',
-        quick_log: true,
-        scheduled_session_id:
-          event.kind === 'scheduled' ? event.id : null,
-        planned_session_id: event.kind === 'planned' ? event.id : null,
-      });
-      toast.success('Marked done');
-      onChanged();
-    } catch (err) {
-      toast.error(describeApiError(err));
-    } finally {
-      setBusy(false);
-    }
+    await actions.markDone({
+      kind: event.kind,
+      id: event.id,
+      student_id: event.student_id,
+      starts_at: event.starts_at,
+      duration_minutes: event.duration_minutes,
+    });
   }
 
   async function deleteEvent() {
     if (!event) return;
-    const kindLabel = event.kind === 'planned' ? 'plan item' : 'session';
-    if (!window.confirm(`Delete this ${kindLabel}? This cannot be undone.`)) {
+    if (event.kind === 'scheduled') {
+      await actions.deleteBooking(event.id);
       return;
     }
-    setBusy(true);
+    if (!window.confirm('Delete this plan item? This cannot be undone.')) return;
     try {
-      if (event.kind === 'scheduled') {
-        await billingApi.deleteSchedule(event.id);
-      } else {
-        await plansApi.deletePlannedSession(event.id);
-      }
+      await plansApi.deletePlannedSession(event.id);
       toast.success('Deleted');
       onChanged();
     } catch (err) {
       toast.error(describeApiError(err));
-    } finally {
-      setBusy(false);
     }
   }
 
@@ -980,7 +875,7 @@ function EventDetailDialog({
                   size="sm"
                   variant="ghost"
                   disabled={busy}
-                  onClick={() => setStatus('cancelled', 'Cancelled')}
+                  onClick={() => void setStatus('cancelled')}
                 >
                   <X className="h-4 w-4" />
                   Cancel
@@ -1026,7 +921,7 @@ function EventDetailDialog({
                   <Button
                     variant="outline"
                     disabled={busy}
-                    onClick={() => setStatus('no_show', 'Marked no-show')}
+                    onClick={() => void setStatus('no_show')}
                   >
                     <CircleSlash className="h-4 w-4" />
                     No-show
@@ -1038,7 +933,7 @@ function EventDetailDialog({
                   <Button
                     variant="ghost"
                     disabled={busy}
-                    onClick={() => setStatus('cancelled', 'Cancelled')}
+                    onClick={() => void setStatus('cancelled')}
                   >
                     <X className="h-4 w-4" />
                     Cancel
@@ -1096,67 +991,6 @@ function EventDetailDialog({
         ) : null}
       </DialogContent>
     </Dialog>
-  );
-}
-
-/** Method + notes fields shared by "approve + mark paid" and "mark paid". */
-function MarkPaidFields({
-  method,
-  onMethod,
-  notes,
-  onNotes,
-  busy,
-  submitLabel,
-  onSubmit,
-  onBack,
-}: {
-  method: MarkPaidMethod;
-  onMethod: (m: MarkPaidMethod) => void;
-  notes: string;
-  onNotes: (v: string) => void;
-  busy: boolean;
-  submitLabel: string;
-  onSubmit: () => void;
-  onBack: () => void;
-}) {
-  return (
-    <div className="space-y-2">
-      <div className="space-y-2">
-        <Label>How did they pay?</Label>
-        <Select
-          value={method}
-          onValueChange={(v) => onMethod(v as MarkPaidMethod)}
-        >
-          <SelectTrigger>
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            {MARK_PAID_METHODS.map((m) => (
-              <SelectItem key={m} value={m} className="capitalize">
-                {m}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </div>
-      <div className="space-y-2">
-        <Label htmlFor="mark-paid-notes">Notes (optional)</Label>
-        <Input
-          id="mark-paid-notes"
-          value={notes}
-          onChange={(e) => onNotes(e.target.value)}
-          placeholder="Reference / who handed it over"
-        />
-      </div>
-      <div className="flex gap-2">
-        <Button size="sm" disabled={busy} onClick={onSubmit}>
-          {submitLabel}
-        </Button>
-        <Button size="sm" variant="ghost" disabled={busy} onClick={onBack}>
-          Back
-        </Button>
-      </div>
-    </div>
   );
 }
 

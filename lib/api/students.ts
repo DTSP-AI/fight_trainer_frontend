@@ -7,6 +7,7 @@ import type {
   StudentDetailResponse,
   StudentHistoryResponse,
   StudentUpdateRequest,
+  StudentWorkspace,
 } from '@/lib/types';
 
 export const studentsApi = {
@@ -24,6 +25,13 @@ export const studentsApi = {
   get: (studentId: string) =>
     apiClient.get<StudentDetailResponse>(
       `/api/students/${encodeURIComponent(studentId)}`,
+    ),
+
+  /** The Client Workspace in one call — ledger, balance, next session,
+   *  needs-attention, plan, skills. */
+  workspace: (studentId: string) =>
+    apiClient.get<StudentWorkspace>(
+      `/api/students/${encodeURIComponent(studentId)}/workspace`,
     ),
 
   update: (studentId: string, payload: StudentUpdateRequest) =>

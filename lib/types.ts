@@ -31,10 +31,12 @@ export type SkillLevel =
 
 export type UserRole = 'trainer' | 'student' | 'dtsp_admin';
 
+// Mirrors the session_status enum (migration 001): a session is 'delivered'
+// once the student received a clip or a notice. There is no 'completed'.
 export type SessionStatus =
   | 'logged'
   | 'processing'
-  | 'completed'
+  | 'delivered'
   | 'error';
 
 export type SessionMode = 'text' | 'realtime_voice';
@@ -99,6 +101,12 @@ export interface Student {
   phone?: string | null;
   date_of_birth?: string | null;
   created_at?: string;
+  // Roster rollups — present on GET /api/students (roster_summary), absent
+  // on single-student reads.
+  next_session_at?: string | null;
+  credits_remaining?: number;
+  owed_cents?: number;
+  last_session_date?: string | null;
 }
 
 export interface StudentCreateRequest {
@@ -186,6 +194,17 @@ export interface SessionCreateRequest {
   planned_session_id?: string | null;
   // Skip the AI analysis pipeline. Used for plain check-offs.
   quick_log?: boolean;
+  // Walk-in lane (D1): a session with no prior booking still lands on the
+  // client's ledger — the backend creates a completed, locked booking and
+  // consumes the credit. Ignored when scheduled_session_id is set.
+  walk_in?: WalkInBooking | null;
+}
+
+export interface WalkInBooking {
+  service_id: string;
+  package_id?: string | null;
+  /** ISO datetime. Defaults to noon (gym timezone) on session_date. */
+  starts_at?: string | null;
 }
 
 export interface SessionCreateResponse {
@@ -414,6 +433,42 @@ export interface DashboardSummary {
   clips_delivered_this_week: number;
   students_at_risk: number;
   pending_session_processing: number;
+  /** What needs the coach now, across clients (backend dashboard_today). */
+  today: DashboardToday;
+}
+
+/** A ledger row decorated with the client's name for cross-client lists. */
+export interface TodayRow extends LedgerRow {
+  full_name: string | null;
+}
+
+export interface LowCreditPackage {
+  id: string;
+  student_id: string;
+  service_id: string;
+  sessions_remaining: number;
+  total_sessions: number;
+  payment_status?: string | null;
+  expires_at?: string | null;
+  full_name: string | null;
+  service_name: string | null;
+}
+
+export interface DashboardToday {
+  date: string | null;
+  timezone: string | null;
+  sessions: TodayRow[];
+  pending_requests: TodayRow[];
+  awaiting_payment: TodayRow[];
+  unlogged_past: TodayRow[];
+  low_credit_packages: LowCreditPackage[];
+  counts: {
+    sessions: number;
+    pending_requests: number;
+    awaiting_payment: number;
+    unlogged_past: number;
+    low_credit_packages: number;
+  };
 }
 
 export interface InactivityAlert {
@@ -440,6 +495,121 @@ export interface StudentDetailResponse {
 export interface StudentHistoryResponse {
   items: Session[];
   next_cursor: string | null;
+}
+
+// ---------- Client Workspace (GET /api/students/{id}/workspace) ----------
+// Mirrors backend/app/services/student_workspace.py. Done / Paid are DERIVED
+// server-side so every surface reads the same state for the same row.
+
+export type LedgerDoneState =
+  | 'requested'
+  | 'upcoming'
+  | 'unlogged'
+  | 'done'
+  | 'no_show'
+  | 'cancelled'
+  | 'declined'
+  | 'unknown';
+
+export type LedgerPaidState =
+  | 'paid'
+  | 'waived'
+  | 'awaiting'
+  | 'credit'
+  | 'free'
+  | 'pending'
+  | 'none';
+
+export interface LedgerPaid {
+  state: LedgerPaidState;
+  package_id: string | null;
+  package_name: string | null;
+  /** D2 amber — a credit funds the session but the package itself is unpaid. */
+  package_unpaid: boolean;
+  price_cents: number | null;
+}
+
+export interface LedgerRow {
+  id: string;
+  tenant_id: string;
+  student_id: string;
+  service_id: string;
+  service_name: string | null;
+  package_id: string | null;
+  scheduled_for: string;
+  duration_minutes: number;
+  price_cents: number;
+  status:
+    | 'pending_approval'
+    | 'awaiting_payment'
+    | 'scheduled'
+    | 'confirmed'
+    | 'completed'
+    | 'no_show'
+    | 'cancelled'
+    | 'declined';
+  notes?: string | null;
+  fulfilled_session_id?: string | null;
+  requested_by_student_at?: string | null;
+  approved_at?: string | null;
+  paid_at?: string | null;
+  payment_waived_at?: string | null;
+  locked_at?: string | null;
+  declined_at?: string | null;
+  decline_reason?: string | null;
+  cancellation_reason?: string | null;
+  done: LedgerDoneState;
+  paid: LedgerPaid;
+}
+
+export interface WorkspaceNeeds {
+  pending_requests: number;
+  awaiting_payment: number;
+  unlogged_past: number;
+  low_credit_packages: number;
+}
+
+export interface WorkspaceBalance {
+  credits_remaining: number;
+  credits_total: number;
+  owed_cents: {
+    packages: number;
+    invoices: number;
+    sessions: number;
+    total: number;
+  };
+  /** PackageRow shape from lib/api/billing plus `service_name`. */
+  packages: Array<Record<string, unknown> & { id: string; service_name?: string | null }>;
+}
+
+export interface WorkspaceTechnique {
+  technique_id: string;
+  name: string | null;
+  category: string | null;
+  times_drilled: number;
+  last_proficiency: string | null;
+}
+
+export interface StudentWorkspace {
+  student: Student;
+  next_session: LedgerRow | null;
+  needs_attention: WorkspaceNeeds;
+  balance: WorkspaceBalance;
+  ledger: LedgerRow[];
+  recent_sessions: Session[];
+  recent_deliveries: ClipDelivery[];
+  open_invoices: Array<Record<string, unknown> & { id: string }>;
+  plan_current: {
+    plan: TrainingPlan;
+    planned_sessions: PlannedSession[];
+  } | null;
+  pending_adjustments: number;
+  skill_summary: {
+    skill_level: SkillLevel | null;
+    sessions_90d: number;
+    techniques: WorkspaceTechnique[];
+  };
+  generated_at: string;
 }
 
 // ---------- Misc ----------

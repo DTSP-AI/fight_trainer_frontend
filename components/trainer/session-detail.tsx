@@ -82,7 +82,7 @@ export function SessionDetail({ sessionId }: SessionDetailProps) {
           <div className="mt-1 flex items-center gap-2 text-sm text-muted-foreground">
             <Badge
               variant={
-                session.status === 'completed'
+                session.status === 'delivered'
                   ? 'default'
                   : session.status === 'error'
                     ? 'destructive'

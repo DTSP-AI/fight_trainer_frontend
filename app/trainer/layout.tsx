@@ -5,11 +5,10 @@ import {
   AlertTriangle,
   CalendarClock,
   CalendarDays,
-  Film,
+  Layers,
   Library,
   Network,
   Plug,
-  Receipt,
   Sparkles,
   Trophy,
   Users,
@@ -23,9 +22,7 @@ const GROUPS: NavGroup[] = [
     items: [
       { href: '/trainer', label: 'Dashboard', icon: <Activity className="h-4 w-4" />, exact: true },
       { href: '/trainer/students', label: 'Clients', icon: <Users className="h-4 w-4" /> },
-      { href: '/trainer/sessions', label: 'Sessions', icon: <Film className="h-4 w-4" /> },
       { href: '/trainer/schedule', label: 'Schedule', icon: <CalendarClock className="h-4 w-4" /> },
-      { href: '/trainer/billing', label: 'Billing', icon: <Receipt className="h-4 w-4" /> },
       { href: '/trainer/plans', label: 'Plans', icon: <CalendarDays className="h-4 w-4" /> },
     ],
   },
@@ -47,6 +44,7 @@ const GROUPS: NavGroup[] = [
   {
     title: 'Settings',
     items: [
+      { href: '/trainer/settings/services', label: 'Services', icon: <Layers className="h-4 w-4" /> },
       { href: '/trainer/settings/payments', label: 'Payments', icon: <Wallet className="h-4 w-4" /> },
       { href: '/trainer/settings/integrations', label: 'Integrations', icon: <Plug className="h-4 w-4" /> },
     ],
@@ -54,7 +52,8 @@ const GROUPS: NavGroup[] = [
 ];
 
 // Mobile bottom bar — the four places a coach goes between sessions.
-const PRIMARY = ['/trainer', '/trainer/students', '/trainer/sessions', '/trainer/billing'];
+// Sessions are logged from a client's workspace; Log jumps to the form.
+const PRIMARY = ['/trainer', '/trainer/students', '/trainer/schedule', '/trainer/sessions/new'];
 
 export default function TrainerLayout({
   children,

@@ -19,6 +19,7 @@ import { studentsApi } from '@/lib/api/students';
 import { describeApiError } from '@/lib/api';
 import { formatDate } from '@/lib/utils';
 import { canResendInvite, useResendInvite } from './use-resend-invite';
+import { fmtCents, fmtWhen } from './ledger-row-actions';
 import type { Student } from '@/lib/types';
 
 export function StudentList() {
@@ -74,8 +75,9 @@ export function StudentList() {
           <TableRow>
             <TableHead>Name</TableHead>
             <TableHead>Sport</TableHead>
-            <TableHead>Skill</TableHead>
-            <TableHead>Started</TableHead>
+            <TableHead>Next session</TableHead>
+            <TableHead>Balance</TableHead>
+            <TableHead>Last trained</TableHead>
             <TableHead>Status</TableHead>
             <TableHead className="text-right">Action</TableHead>
           </TableRow>
@@ -83,12 +85,38 @@ export function StudentList() {
         <TableBody>
           {students.map((s) => (
             <TableRow key={s.id}>
-              <TableCell className="font-medium">{s.full_name}</TableCell>
+              <TableCell className="font-medium">
+                <Link href={`/trainer/students/${s.id}`} className="hover:underline">
+                  {s.full_name}
+                </Link>
+              </TableCell>
               <TableCell className="capitalize">
                 {s.primary_sport.replace('_', ' ')}
+                {s.skill_level ? (
+                  <span className="ml-1 text-xs text-muted-foreground">· {s.skill_level}</span>
+                ) : null}
               </TableCell>
-              <TableCell className="capitalize">{s.skill_level ?? '—'}</TableCell>
-              <TableCell>{formatDate(s.started_training_at) || '—'}</TableCell>
+              <TableCell>
+                {s.next_session_at ? (
+                  fmtWhen(s.next_session_at)
+                ) : (
+                  <span className="text-muted-foreground/70">—</span>
+                )}
+              </TableCell>
+              <TableCell>
+                <span className="tabular-nums">{s.credits_remaining ?? 0}</span>
+                <span className="text-xs text-muted-foreground"> credits</span>
+                {s.owed_cents ? (
+                  <span className="ml-2 text-xs text-amber-200">{fmtCents(s.owed_cents)} owed</span>
+                ) : null}
+              </TableCell>
+              <TableCell>
+                {s.last_session_date ? (
+                  formatDate(s.last_session_date)
+                ) : (
+                  <span className="text-muted-foreground/70">never</span>
+                )}
+              </TableCell>
               <TableCell>
                 <Badge
                   variant={
