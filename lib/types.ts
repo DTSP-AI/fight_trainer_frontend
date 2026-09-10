@@ -101,6 +101,12 @@ export interface Student {
   phone?: string | null;
   date_of_birth?: string | null;
   created_at?: string;
+  // Roster rollups — present on GET /api/students (roster_summary), absent
+  // on single-student reads.
+  next_session_at?: string | null;
+  credits_remaining?: number;
+  owed_cents?: number;
+  last_session_date?: string | null;
 }
 
 export interface StudentCreateRequest {
@@ -427,6 +433,42 @@ export interface DashboardSummary {
   clips_delivered_this_week: number;
   students_at_risk: number;
   pending_session_processing: number;
+  /** What needs the coach now, across clients (backend dashboard_today). */
+  today: DashboardToday;
+}
+
+/** A ledger row decorated with the client's name for cross-client lists. */
+export interface TodayRow extends LedgerRow {
+  full_name: string | null;
+}
+
+export interface LowCreditPackage {
+  id: string;
+  student_id: string;
+  service_id: string;
+  sessions_remaining: number;
+  total_sessions: number;
+  payment_status?: string | null;
+  expires_at?: string | null;
+  full_name: string | null;
+  service_name: string | null;
+}
+
+export interface DashboardToday {
+  date: string | null;
+  timezone: string | null;
+  sessions: TodayRow[];
+  pending_requests: TodayRow[];
+  awaiting_payment: TodayRow[];
+  unlogged_past: TodayRow[];
+  low_credit_packages: LowCreditPackage[];
+  counts: {
+    sessions: number;
+    pending_requests: number;
+    awaiting_payment: number;
+    unlogged_past: number;
+    low_credit_packages: number;
+  };
 }
 
 export interface InactivityAlert {

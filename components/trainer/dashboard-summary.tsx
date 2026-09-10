@@ -7,9 +7,12 @@ import { LoadingState } from '@/components/common/loading-state';
 import { dashboardApi } from '@/lib/api/dashboard';
 import { describeApiError } from '@/lib/api';
 import type { DashboardSummary } from '@/lib/types';
+import { DashboardToday } from './dashboard-today';
+
+type TileKey = Exclude<keyof DashboardSummary, 'today'>;
 
 const TILES: {
-  key: keyof DashboardSummary;
+  key: TileKey;
   label: string;
   icon: React.ComponentType<{ className?: string }>;
 }[] = [
@@ -19,9 +22,11 @@ const TILES: {
   { key: 'students_at_risk', label: 'Clients at risk', icon: AlertTriangle },
 ];
 
-export function DashboardSummaryTiles() {
+/** Fetches the summary once and renders the KPI tiles + the Today block. */
+export function DashboardHome() {
   const [data, setData] = useState<DashboardSummary | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [tick, setTick] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
@@ -36,7 +41,7 @@ export function DashboardSummaryTiles() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [tick]);
 
   if (error) {
     return (
@@ -48,6 +53,15 @@ export function DashboardSummaryTiles() {
 
   if (!data) return <LoadingState label="Loading summary…" />;
 
+  return (
+    <div className="space-y-8">
+      <DashboardToday today={data.today} onChanged={() => setTick((t) => t + 1)} />
+      <DashboardSummaryTiles data={data} />
+    </div>
+  );
+}
+
+export function DashboardSummaryTiles({ data }: { data: DashboardSummary }) {
   return (
     <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-4">
       {TILES.map(({ key, label, icon: Icon }) => (

@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import { Plus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { DashboardSummaryTiles } from '@/components/trainer/dashboard-summary';
+import { DashboardHome } from '@/components/trainer/dashboard-summary';
 import { InactivityAlertsList } from '@/components/trainer/inactivity-alerts-list';
 
 export default function TrainerDashboardPage() {
@@ -11,7 +11,7 @@ export default function TrainerDashboardPage() {
         <div>
           <h1 className="text-3xl font-semibold tracking-tight">Dashboard</h1>
           <p className="mt-1 text-sm text-muted-foreground">
-            What needs your attention right now.
+            Today&apos;s sessions, what needs a decision, and who&apos;s going quiet.
           </p>
         </div>
         <Button asChild>
@@ -22,7 +22,7 @@ export default function TrainerDashboardPage() {
         </Button>
       </div>
 
-      <DashboardSummaryTiles />
+      <DashboardHome />
 
       <section className="space-y-3">
         <div className="flex items-end justify-between">
