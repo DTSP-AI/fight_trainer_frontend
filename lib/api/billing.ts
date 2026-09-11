@@ -310,14 +310,14 @@ export const billingApi = {
     apiClient.get<PackageRow[]>(
       `/api/packages${status ? `?status=${status}` : ''}`,
     ),
-  listPackagesNeedingReup: (threshold = 3) =>
+  listPackagesNeedingReup: (threshold?: number) =>
     apiClient.get<
       Array<
         PackageRow & {
           students?: { full_name?: string; primary_sport?: string } | null;
         }
       >
-    >(`/api/packages/needs-reup?threshold=${threshold}`),
+    >(`/api/packages/needs-reup${threshold != null ? `?threshold=${threshold}` : ''}`),
   listPackages: (studentId: string) =>
     apiClient.get<PackageRow[]>(
       `/api/students/${encodeURIComponent(studentId)}/packages`,

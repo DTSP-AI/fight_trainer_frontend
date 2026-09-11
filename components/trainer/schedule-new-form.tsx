@@ -32,6 +32,7 @@ export function ScheduleNewForm({
   onOpenChange,
   defaultDateTime,
   defaultStudentId,
+  compact = false,
 }: {
   students: Student[];
   services: ServiceRow[];
@@ -41,11 +42,16 @@ export function ScheduleNewForm({
   onOpenChange: (next: boolean) => void;
   defaultDateTime?: string;
   defaultStudentId?: string;
+  /** Client Workspace mode: the student is fixed, the active package (and
+   *  its service, duration, price) is picked automatically, and the coach
+   *  only chooses WHEN. "Change" reveals the full form. */
+  compact?: boolean;
 }) {
   const [studentId, setStudentId] = useState(defaultStudentId ?? '');
   const [packageId, setPackageId] = useState('');
   const [serviceId, setServiceId] = useState('');
   const [scheduledFor, setScheduledFor] = useState(defaultDateTime ?? '');
+  const [showAll, setShowAll] = useState(!compact);
 
   // Adopt a freshly-picked day from the calendar, and a student deep-linked
   // from their detail page (?student=<id>). React's documented way to adjust
@@ -89,8 +95,39 @@ export function ScheduleNewForm({
     if (p) {
       setServiceId(p.service_id);
       setPrice((p.price_per_session_cents / 100).toFixed(2));
+      const svc = services.find((sv) => sv.id === p.service_id);
+      if (svc) setDuration(String(svc.default_duration_minutes));
     }
   }
+
+  // Compact mode: the first package with credit (or the first active
+  // service) is the obvious choice — pick it once, during render, so the
+  // coach only has to say when. Derived from props/state, never an effect.
+  const [autoPickedFor, setAutoPickedFor] = useState<string | null>(null);
+  if (compact && studentId && autoPickedFor !== studentId && (packages.length || services.length)) {
+    setAutoPickedFor(studentId);
+    const first = studentPackages[0];
+    if (first) {
+      pickPackage(first.id);
+    } else {
+      const svc = services.find((sv) => sv.is_active);
+      if (svc) {
+        setServiceId(svc.id);
+        setDuration(String(svc.default_duration_minutes));
+        setPrice((svc.default_price_cents / 100).toFixed(2));
+      }
+    }
+  }
+
+  const pickedPackage = packages.find((x) => x.id === packageId);
+  const pickedService = services.find((sv) => sv.id === serviceId);
+  const summary = pickedService
+    ? `${pickedService.name} · ${duration} min · ${
+        pickedPackage
+          ? `package credit (${pickedPackage.sessions_remaining} of ${pickedPackage.total_sessions} left)`
+          : `drop-in ${fmtCents(Math.round(Number(price || 0) * 100))}`
+      }`
+    : null;
 
   function pickService(id: string) {
     setServiceId(id);
@@ -120,9 +157,11 @@ export function ScheduleNewForm({
       onOpenChange(false);
       setNotes('');
       setScheduledFor('');
-      setStudentId('');
-      setPackageId('');
-      setServiceId('');
+      if (!compact) {
+        setStudentId('');
+        setPackageId('');
+        setServiceId('');
+      }
       onCreated();
     } catch (err) {
       toast.error(describeApiError(err));
@@ -147,8 +186,42 @@ export function ScheduleNewForm({
       </CardHeader>
       <CardContent>
         <form onSubmit={submit} className="space-y-3">
-          <div className="grid gap-3 md:grid-cols-2">
-            <div className="space-y-2">
+          {compact && !showAll ? (
+            <div className="grid gap-3 md:grid-cols-[1fr_auto] md:items-end">
+              <div className="space-y-2">
+                <Label htmlFor="when">When</Label>
+                <Input
+                  id="when"
+                  type="datetime-local"
+                  value={scheduledFor}
+                  onChange={(e) => setScheduledFor(e.target.value)}
+                  required
+                  autoFocus
+                />
+                <p className="text-xs text-muted-foreground">
+                  {summary ?? 'No active package or service — '}
+                  {summary ? ' · ' : null}
+                  <button
+                    type="button"
+                    onClick={() => setShowAll(true)}
+                    className="underline underline-offset-4 hover:text-foreground"
+                  >
+                    change
+                  </button>
+                </p>
+              </div>
+              <div className="flex gap-2">
+                <Button type="submit" disabled={busy || !serviceId}>
+                  {busy ? 'Scheduling…' : 'Book'}
+                </Button>
+                <Button type="button" variant="ghost" onClick={() => onOpenChange(false)}>
+                  Cancel
+                </Button>
+              </div>
+            </div>
+          ) : null}
+          <div className={compact && !showAll ? 'hidden' : 'grid gap-3 md:grid-cols-2'}>
+            <div className={compact ? 'hidden' : 'space-y-2'}>
               <Label>Student</Label>
               <select
                 className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
@@ -203,13 +276,13 @@ export function ScheduleNewForm({
               </select>
             </div>
             <div className="space-y-2">
-              <Label htmlFor="when">When</Label>
+              <Label htmlFor="when-full">When</Label>
               <Input
-                id="when"
+                id="when-full"
                 type="datetime-local"
                 value={scheduledFor}
                 onChange={(e) => setScheduledFor(e.target.value)}
-                required
+                required={!(compact && !showAll)}
               />
             </div>
             <div className="space-y-2">
@@ -236,7 +309,7 @@ export function ScheduleNewForm({
               />
             </div>
           </div>
-          <div className="space-y-2">
+          <div className={compact && !showAll ? 'hidden' : 'space-y-2'}>
             <Label htmlFor="notes">Notes (optional)</Label>
             <AssistedTextarea
               id="notes"
@@ -247,7 +320,7 @@ export function ScheduleNewForm({
               assistStudentId={studentId || null}
             />
           </div>
-          <div className="flex gap-2">
+          <div className={compact && !showAll ? 'hidden' : 'flex gap-2'}>
             <Button type="submit" disabled={busy}>
               {busy ? 'Scheduling…' : 'Schedule'}
             </Button>

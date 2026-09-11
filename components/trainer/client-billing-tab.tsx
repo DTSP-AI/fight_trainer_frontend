@@ -155,6 +155,11 @@ function NewPackageForm({
   const [sharedIds, setSharedIds] = useState<string[]>([]);
   const [submitting, setSubmitting] = useState(false);
   const [open, setOpen] = useState(false);
+  // Packages are prepaid in this house: default to "paid now" so a package
+  // never sits as "owed" just because nobody clicked Record payment.
+  const [paidNow, setPaidNow] = useState(true);
+  const [paidMethod, setPaidMethod] = useState<OffStripeMethod>('venmo');
+  const [paidReference, setPaidReference] = useState('');
 
   function toggleShared(id: string, on: boolean) {
     setSharedIds((prev) =>
@@ -180,8 +185,14 @@ function NewPackageForm({
         price_per_session_cents: Math.round(Number(pricePerSession) * 100),
         notes: notes || undefined,
         shared_student_ids: sharedIds,
+        ...(paidNow
+          ? {
+              mark_paid_method: paidMethod,
+              ...(paidReference.trim() ? { mark_paid_reference: paidReference.trim() } : {}),
+            }
+          : {}),
       });
-      toast.success('Package created');
+      toast.success(paidNow ? 'Package created and marked paid' : 'Package created — payment pending');
       setOpen(false);
       setNotes('');
       setSharedIds([]);
@@ -268,6 +279,49 @@ function NewPackageForm({
               onChange={(e) => setNotes(e.target.value)}
             />
           </div>
+          <div className="space-y-2 rounded-md border border-border bg-background/40 p-3">
+            <label className="flex items-center gap-2 text-sm">
+              <input
+                type="checkbox"
+                checked={paidNow}
+                onChange={(e) => setPaidNow(e.target.checked)}
+                className="h-4 w-4"
+              />
+              Paid in full now ({fmtCents(total * 100)})
+            </label>
+            {paidNow ? (
+              <div className="grid gap-2 md:grid-cols-2">
+                <div className="space-y-1">
+                  <Label htmlFor="paid_method">How</Label>
+                  <select
+                    id="paid_method"
+                    className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm capitalize"
+                    value={paidMethod}
+                    onChange={(e) => setPaidMethod(e.target.value as OffStripeMethod)}
+                  >
+                    {OFF_STRIPE_METHODS.map((m) => (
+                      <option key={m} value={m}>
+                        {m}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div className="space-y-1">
+                  <Label htmlFor="paid_ref">Reference (optional)</Label>
+                  <Input
+                    id="paid_ref"
+                    value={paidReference}
+                    onChange={(e) => setPaidReference(e.target.value)}
+                    placeholder="Venmo note, last 4, …"
+                  />
+                </div>
+              </div>
+            ) : (
+              <p className="text-xs text-amber-200">
+                The package will show as owed until you record the payment.
+              </p>
+            )}
+          </div>
           <SharedStudentPicker
             students={roster}
             ownerId={studentId}
@@ -276,7 +330,7 @@ function NewPackageForm({
           />
           <div className="flex gap-2">
             <Button type="submit" disabled={submitting}>
-              {submitting ? 'Creating…' : 'Create package'}
+              {submitting ? 'Creating…' : paidNow ? 'Create paid package' : 'Create package'}
             </Button>
             <Button type="button" variant="ghost" onClick={() => setOpen(false)}>
               Cancel
