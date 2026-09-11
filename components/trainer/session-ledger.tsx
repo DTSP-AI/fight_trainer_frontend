@@ -9,12 +9,15 @@ import {
   Copy,
   CreditCard,
   ExternalLink,
+  Pencil,
+  Repeat,
   ThumbsDown,
   Trash2,
   X,
 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { EmptyState } from '@/components/common/empty-state';
@@ -245,7 +248,15 @@ export function SessionLedger({
 // One row — state cells + inline action panels
 // ----------------------------------------------------------------------------
 
-type Panel = 'none' | 'approve' | 'markPaidApprove' | 'markPaidSettle' | 'decline';
+/** ISO → the value an <input type="datetime-local"> wants, in local time. */
+function toLocalInput(iso: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return '';
+  const p = (n: number) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`;
+}
+
+type Panel = 'none' | 'approve' | 'markPaidApprove' | 'markPaidSettle' | 'decline' | 'edit';
 
 function LedgerRowView({
   row,
@@ -261,6 +272,9 @@ function LedgerRowView({
   const [payNotes, setPayNotes] = useState('');
   const [declineReason, setDeclineReason] = useState('');
   const [packageExhausted, setPackageExhausted] = useState(false);
+  const [editWhen, setEditWhen] = useState(() => toLocalInput(row.scheduled_for));
+  const [editDuration, setEditDuration] = useState(String(row.duration_minutes ?? 60));
+  const [editNotes, setEditNotes] = useState(row.notes ?? '');
   const busy = actions.busy;
 
   const isPending = row.status === 'pending_approval';
@@ -373,23 +387,55 @@ function LedgerRowView({
                   No-show
                 </Button>
                 {row.done === 'upcoming' ? (
-                  <Button size="sm" variant="outline" disabled={busy} onClick={() => void actions.remind(row.id)}>
+                  <Button size="sm" variant="outline" disabled={busy} onClick={() => void actions.remind(row.id)} title="Remind client">
                     <Bell className="h-4 w-4" />
                   </Button>
                 ) : null}
-                <Button size="sm" variant="ghost" disabled={busy} onClick={() => void actions.setStatus(row.id, 'cancelled')}>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={busy}
+                  title="Move this session"
+                  onClick={() => setPanel(panel === 'edit' ? 'none' : 'edit')}
+                >
+                  <Pencil className="h-4 w-4" />
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={busy}
+                  title="Book the same slot next week"
+                  onClick={() => void actions.repeatNextWeek(row)}
+                >
+                  <Repeat className="h-4 w-4" />
+                </Button>
+                <Button size="sm" variant="ghost" disabled={busy} onClick={() => void actions.setStatus(row.id, 'cancelled')} title="Cancel">
                   <X className="h-4 w-4" />
                 </Button>
               </>
             ) : null}
 
-            {isDone && row.fulfilled_session_id ? (
-              <Button asChild size="sm" variant="outline">
-                <Link href={`/trainer/sessions/${row.fulfilled_session_id}`}>
-                  <ExternalLink className="h-4 w-4" />
-                  View log
-                </Link>
-              </Button>
+            {isDone ? (
+              <>
+                {row.fulfilled_session_id ? (
+                  <Button asChild size="sm" variant="outline">
+                    <Link href={`/trainer/sessions/${row.fulfilled_session_id}`}>
+                      <ExternalLink className="h-4 w-4" />
+                      View log
+                    </Link>
+                  </Button>
+                ) : null}
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={busy}
+                  title="Book the same slot next week"
+                  onClick={() => void actions.repeatNextWeek(row)}
+                >
+                  <Repeat className="h-4 w-4" />
+                  Next week
+                </Button>
+              </>
             ) : null}
 
             {row.status === 'cancelled' || row.status === 'declined' || row.status === 'no_show' ? (
@@ -468,6 +514,63 @@ function LedgerRowView({
                   }}
                   onBack={reset}
                 />
+              ) : null}
+
+              {panel === 'edit' ? (
+                <div className="grid gap-2 md:grid-cols-[1fr_auto]">
+                  <div className="space-y-2">
+                    <Label htmlFor={`edit-when-${row.id}`}>When</Label>
+                    <Input
+                      id={`edit-when-${row.id}`}
+                      type="datetime-local"
+                      value={editWhen}
+                      onChange={(e) => setEditWhen(e.target.value)}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor={`edit-dur-${row.id}`}>Minutes</Label>
+                    <Input
+                      id={`edit-dur-${row.id}`}
+                      type="number"
+                      min={15}
+                      max={480}
+                      className="w-24"
+                      value={editDuration}
+                      onChange={(e) => setEditDuration(e.target.value)}
+                    />
+                  </div>
+                  <div className="space-y-2 md:col-span-2">
+                    <Label htmlFor={`edit-notes-${row.id}`}>Notes</Label>
+                    <Input
+                      id={`edit-notes-${row.id}`}
+                      value={editNotes}
+                      onChange={(e) => setEditNotes(e.target.value)}
+                      placeholder="optional"
+                    />
+                  </div>
+                  <div className="flex gap-2 md:col-span-2">
+                    <Button
+                      size="sm"
+                      disabled={busy || !editWhen}
+                      onClick={() => {
+                        void actions
+                          .reschedule(row.id, {
+                            scheduled_for: new Date(editWhen).toISOString(),
+                            duration_minutes: Number(editDuration) || row.duration_minutes,
+                            ...(editNotes.trim() ? { notes: editNotes.trim() } : {}),
+                          })
+                          .then((ok) => {
+                            if (ok) reset();
+                          });
+                      }}
+                    >
+                      Save
+                    </Button>
+                    <Button size="sm" variant="ghost" disabled={busy} onClick={reset}>
+                      Cancel
+                    </Button>
+                  </div>
+                </div>
               ) : null}
 
               {panel === 'decline' ? (

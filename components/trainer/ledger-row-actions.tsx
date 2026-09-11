@@ -216,6 +216,62 @@ export function useBookingActions({
     });
   }
 
+  /** Move a booking (time / length / notes). The only non-status PATCH. */
+  async function reschedule(
+    id: string,
+    patch: { scheduled_for?: string; duration_minutes?: number; notes?: string },
+  ): Promise<boolean> {
+    return (
+      (await run(async () => {
+        try {
+          await billingApi.updateSchedule(id, patch);
+          toast.success('Session updated');
+          onChanged();
+          return true;
+        } catch (err) {
+          toast.error(describeApiError(err));
+          return false;
+        }
+      })) ?? false
+    );
+  }
+
+  /** Book the same session seven days later — same service, same package
+   *  (if it still has credit), same duration and price. */
+  async function repeatNextWeek(row: {
+    student_id: string;
+    service_id: string;
+    package_id?: string | null;
+    scheduled_for: string;
+    duration_minutes: number;
+    price_cents: number;
+  }) {
+    await run(async () => {
+      const next = new Date(row.scheduled_for);
+      next.setDate(next.getDate() + 7);
+      try {
+        await billingApi.scheduleSession({
+          student_id: row.student_id,
+          service_id: row.service_id,
+          package_id: row.package_id ?? undefined,
+          scheduled_for: next.toISOString(),
+          duration_minutes: row.duration_minutes,
+          price_cents: row.price_cents,
+        });
+        toast.success(`Booked for ${fmtWhen(next.toISOString())}`);
+        onChanged();
+      } catch (err) {
+        if (err instanceof ApiClientError && err.code === 'PACKAGE_EXHAUSTED') {
+          toast.error('Package is out of credits — book it as a drop-in or sell a new package.');
+        } else if (err instanceof ApiClientError && err.code === 'SLOT_TAKEN') {
+          toast.error('That slot is taken next week — pick another time.');
+        } else {
+          toast.error(describeApiError(err));
+        }
+      }
+    });
+  }
+
   async function deleteBooking(id: string) {
     if (!window.confirm('Delete this session? This cannot be undone.')) return;
     await run(async () => {
@@ -239,6 +295,8 @@ export function useBookingActions({
     remind,
     markDone,
     setStatus,
+    reschedule,
+    repeatNextWeek,
     deleteBooking,
   };
 }

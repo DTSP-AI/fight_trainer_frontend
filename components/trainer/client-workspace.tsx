@@ -128,6 +128,19 @@ export function ClientWorkspace({ studentId }: { studentId: string }) {
   // re-fetch.
   const packages = ws.balance.packages as unknown as PackageRow[];
 
+  // Smart default for "when": the client's usual slot, one week after their
+  // most recent locked booking. Empty when there is nothing to go on.
+  const defaultWhen = (() => {
+    const last = ws.ledger.find((r) => r.status === 'scheduled' || r.status === 'confirmed' || r.status === 'completed');
+    if (!last) return undefined;
+    const d = new Date(last.scheduled_for);
+    if (Number.isNaN(d.getTime())) return undefined;
+    d.setDate(d.getDate() + 7);
+    while (d.getTime() < Date.parse(ws.generated_at)) d.setDate(d.getDate() + 7);
+    const p = (n: number) => String(n).padStart(2, '0');
+    return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`;
+  })();
+
   return (
     <div className="space-y-5">
       <Breadcrumbs
@@ -196,6 +209,8 @@ export function ClientWorkspace({ studentId }: { studentId: string }) {
           open={bookOpen}
           onOpenChange={setBookOpen}
           defaultStudentId={student.id}
+          defaultDateTime={defaultWhen}
+          compact
           onCreated={() => {
             setBookOpen(false);
             void reload();
