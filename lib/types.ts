@@ -7,6 +7,8 @@
  * the call sites.
  */
 
+import type { PackageOfferRow } from '@/lib/api/package-offers';
+
 // ---------- Enums ----------
 // Strictly the user-pickable martial arts. The DB's sport enum also
 // has 'universal' (for cross-art canonical techniques like the Musashi
@@ -595,6 +597,8 @@ export interface StudentWorkspace {
   next_session: LedgerRow | null;
   needs_attention: WorkspaceNeeds;
   balance: WorkspaceBalance;
+  /** Re-up proposals, newest first (PackageOfferRow from lib/api/package-offers). */
+  package_offers: PackageOfferRow[];
   ledger: LedgerRow[];
   recent_sessions: Session[];
   recent_deliveries: ClipDelivery[];

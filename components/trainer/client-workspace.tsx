@@ -23,6 +23,8 @@ import { ClientBillingTab } from './client-billing-tab';
 import { ClientSkillsTab } from './client-skills-tab';
 import { ClientPlanTab } from './client-plan-tab';
 import { ClientProfileTab } from './client-profile-tab';
+import { PackageOfferDialog } from './package-offer-dialog';
+import { PackageOffersPanel } from './package-offers-panel';
 
 export type WorkspaceTab = 'sessions' | 'billing' | 'skills' | 'plan' | 'profile';
 const TABS: WorkspaceTab[] = ['sessions', 'billing', 'skills', 'plan', 'profile'];
@@ -49,6 +51,7 @@ export function ClientWorkspace({ studentId }: { studentId: string }) {
   const [services, setServices] = useState<ServiceRow[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [bookOpen, setBookOpen] = useState(params.get('book') === '1');
+  const [offerOpen, setOfferOpen] = useState(false);
   const [ledgerFilter, setLedgerFilter] = useState<LedgerFilter>('all');
   const ledgerRef = useRef<HTMLDivElement | null>(null);
 
@@ -117,7 +120,13 @@ export function ClientWorkspace({ studentId }: { studentId: string }) {
 
   const tabs: TabItem<WorkspaceTab>[] = [
     { value: 'sessions', label: 'Sessions', badge: needsTotal || null },
-    { value: 'billing', label: 'Billing', badge: ws.open_invoices.length || null },
+    // Low-credit packages are a billing decision, so they count here — this
+    // keeps the tab badges in step with the header strip's "Needs you" total.
+    {
+      value: 'billing',
+      label: 'Billing',
+      badge: ws.open_invoices.length + ws.needs_attention.low_credit_packages || null,
+    },
     { value: 'skills', label: 'Skills' },
     { value: 'plan', label: 'Plan', badge: ws.pending_adjustments || null },
     { value: 'profile', label: 'Profile' },
@@ -127,6 +136,17 @@ export function ClientWorkspace({ studentId }: { studentId: string }) {
   // carries the same rows (plus service_name), so this is a re-type, not a
   // re-fetch.
   const packages = ws.balance.packages as unknown as PackageRow[];
+
+  // The package to suggest the next one from: the active one running lowest,
+  // else the most recent one of any status. Owned only — never propose a
+  // renewal of someone else's shared package to this client.
+  const offerBase = (() => {
+    const owned = packages.filter((p) => p.student_id === student.id);
+    const active = owned
+      .filter((p) => p.status === 'active')
+      .sort((a, b) => a.sessions_remaining - b.sessions_remaining);
+    return active[0] ?? owned[0] ?? null;
+  })();
 
   // Smart default for "when": the client's usual slot, one week after their
   // most recent locked booking. Empty when there is nothing to go on.
@@ -197,6 +217,17 @@ export function ClientWorkspace({ studentId }: { studentId: string }) {
         onBook={openBook}
         onTakePayment={() => setTab('billing')}
         onReview={review}
+        onOffer={() => setOfferOpen(true)}
+      />
+
+      <PackageOfferDialog
+        open={offerOpen}
+        onOpenChange={setOfferOpen}
+        studentId={student.id}
+        studentName={student.full_name}
+        services={services}
+        basePackage={offerBase}
+        onSent={() => void reload()}
       />
 
       <TabStrip tabs={tabs} value={tab} onChange={setTab} />
@@ -229,7 +260,12 @@ export function ClientWorkspace({ studentId }: { studentId: string }) {
         </div>
       </TabPanel>
 
-      <TabPanel value="billing" active={tab}>
+      <TabPanel value="billing" active={tab} className="space-y-6">
+        <PackageOffersPanel
+          offers={ws.package_offers}
+          onSendNew={() => setOfferOpen(true)}
+          onChanged={() => void reload()}
+        />
         <ClientBillingTab studentId={student.id} onChanged={() => void reload()} />
       </TabPanel>
 

@@ -336,6 +336,14 @@ export const billingApi = {
       `/api/packages/${encodeURIComponent(packageId)}`,
       payload,
     ),
+  /** Stripe Checkout for a package's unpaid balance. Coach gets a link to
+   *  forward; a student may call it for their OWN package (accept-offer flow)
+   *  and is returned to /student/sessions?paid=1. */
+  startPackageCheckout: (packageId: string) =>
+    apiClient.post<StripeCheckoutResponse>(
+      `/api/packages/${encodeURIComponent(packageId)}/checkout`,
+      {},
+    ),
   recordManualPayment: (
     packageId: string,
     payload: {
