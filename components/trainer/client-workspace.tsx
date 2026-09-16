@@ -120,7 +120,13 @@ export function ClientWorkspace({ studentId }: { studentId: string }) {
 
   const tabs: TabItem<WorkspaceTab>[] = [
     { value: 'sessions', label: 'Sessions', badge: needsTotal || null },
-    { value: 'billing', label: 'Billing', badge: ws.open_invoices.length || null },
+    // Low-credit packages are a billing decision, so they count here — this
+    // keeps the tab badges in step with the header strip's "Needs you" total.
+    {
+      value: 'billing',
+      label: 'Billing',
+      badge: ws.open_invoices.length + ws.needs_attention.low_credit_packages || null,
+    },
     { value: 'skills', label: 'Skills' },
     { value: 'plan', label: 'Plan', badge: ws.pending_adjustments || null },
     { value: 'profile', label: 'Profile' },
