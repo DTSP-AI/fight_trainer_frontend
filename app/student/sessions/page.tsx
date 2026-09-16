@@ -1,12 +1,15 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { Suspense, useCallback, useEffect, useRef, useState } from 'react';
+import { useSearchParams } from 'next/navigation';
+import { toast } from 'sonner';
 import { LoadingState } from '@/components/common/loading-state';
+import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { studentPortalApi } from '@/lib/api/student-portal';
 import { billingApi, type PackageRow } from '@/lib/api/billing';
-import { describeApiError } from '@/lib/api';
+import { ApiClientError, describeApiError } from '@/lib/api';
 import type { Session, Student } from '@/lib/types';
 
 function fmtCents(c: number): string {
@@ -26,33 +29,73 @@ function fmtDate(iso?: string | null): string {
 }
 
 export default function StudentSessionsPage() {
+  // useSearchParams requires a Suspense boundary during prerender.
+  return (
+    <Suspense fallback={<LoadingState label="Loading your sessions…" />}>
+      <StudentSessionsContent />
+    </Suspense>
+  );
+}
+
+function StudentSessionsContent() {
+  const searchParams = useSearchParams();
+  const justPaid = searchParams.get('paid') === '1';
+  const paidToastShown = useRef(false);
+
   const [me, setMe] = useState<Student | null>(null);
   const [packages, setPackages] = useState<PackageRow[] | null>(null);
   const [history, setHistory] = useState<Session[] | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [payingId, setPayingId] = useState<string | null>(null);
+
+  const refresh = useCallback(async () => {
+    try {
+      const meRes = await studentPortalApi.me();
+      setMe(meRes);
+      const [pkgs, sess] = await Promise.all([
+        billingApi.listPackages(meRes.id),
+        studentPortalApi.mySessions(50),
+      ]);
+      setPackages(pkgs);
+      setHistory(sess);
+    } catch (err) {
+      setError(describeApiError(err));
+    }
+  }, []);
 
   useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      try {
-        const meRes = await studentPortalApi.me();
-        if (cancelled) return;
-        setMe(meRes);
-        const [pkgs, sess] = await Promise.all([
-          billingApi.listPackages(meRes.id),
-          studentPortalApi.mySessions(50),
-        ]);
-        if (cancelled) return;
-        setPackages(pkgs);
-        setHistory(sess);
-      } catch (err) {
-        if (!cancelled) setError(describeApiError(err));
-      }
+    // Wrapped so the loader's setState calls land in a promise callback
+    // rather than synchronously in the effect body.
+    void (async () => {
+      await refresh();
     })();
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+  }, [refresh]);
+
+  // Back from Stripe checkout for a package.
+  useEffect(() => {
+    if (!justPaid || paidToastShown.current) return;
+    paidToastShown.current = true;
+    void (async () => {
+      toast.success('Payment received — your package is ready to book');
+      await refresh();
+    })();
+  }, [justPaid, refresh]);
+
+  async function pay(pkg: PackageRow) {
+    setPayingId(pkg.id);
+    try {
+      const res = await billingApi.startPackageCheckout(pkg.id);
+      window.location.assign(res.checkout_url);
+    } catch (err) {
+      const code = err instanceof ApiClientError ? err.code : undefined;
+      toast.error(
+        code === 'STRIPE_NOT_CONFIGURED'
+          ? 'Online payment is not set up — settle with your coach'
+          : describeApiError(err),
+      );
+      setPayingId(null);
+    }
+  }
 
   if (error) {
     return (
@@ -136,11 +179,26 @@ export default function StudentSessionsPage() {
                     </span>
                   ) : null}
                 </div>
-                <Badge
-                  variant={p.payment_status === 'paid' ? 'default' : 'secondary'}
-                >
-                  {p.payment_status}
-                </Badge>
+                <div className="flex items-center gap-2">
+                  <Badge
+                    variant={p.payment_status === 'paid' ? 'default' : 'secondary'}
+                  >
+                    {p.payment_status}
+                  </Badge>
+                  {p.student_id === me.id &&
+                  p.payment_status !== 'paid' &&
+                  p.total_price_cents - p.amount_paid_cents > 0 ? (
+                    <Button
+                      size="sm"
+                      disabled={payingId === p.id}
+                      onClick={() => void pay(p)}
+                    >
+                      {payingId === p.id
+                        ? 'Opening…'
+                        : `Pay ${fmtCents(p.total_price_cents - p.amount_paid_cents)}`}
+                    </Button>
+                  ) : null}
+                </div>
               </div>
             ))}
           </CardContent>

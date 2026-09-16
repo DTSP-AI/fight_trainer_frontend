@@ -13,6 +13,7 @@ import {
 import { AppShell, type NavGroup } from '@/components/common/app-shell';
 import { RoleGate } from '@/components/common/role-gate';
 import { IntakeReminder } from '@/components/student/intake-reminder';
+import { PackageOfferCta } from '@/components/student/package-offer-cta';
 
 const GROUPS: NavGroup[] = [
   {
@@ -60,6 +61,7 @@ export default function StudentLayout({
         ]}
       >
         <IntakeReminder />
+        <PackageOfferCta />
         {children}
       </AppShell>
     </RoleGate>

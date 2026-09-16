@@ -1,6 +1,6 @@
 'use client';
 
-import { Bell, CalendarPlus, Check, Receipt } from 'lucide-react';
+import { Bell, CalendarPlus, Check, Receipt, Send } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { cn } from '@/lib/utils';
@@ -17,18 +17,22 @@ export function ClientHeaderStrip({
   onBook,
   onTakePayment,
   onReview,
+  onOffer,
 }: {
   ws: StudentWorkspace;
   actions: BookingActions;
   onBook: () => void;
   onTakePayment: () => void;
   onReview: () => void;
+  /** "Send new package" — the action behind the re-up signal. */
+  onOffer: () => void;
 }) {
   const next = ws.next_session;
   const needs = ws.needs_attention;
   const needsTotal =
     needs.pending_requests + needs.awaiting_payment + needs.unlogged_past + needs.low_credit_packages;
   const owed = ws.balance.owed_cents.total;
+  const openOffer = ws.package_offers.find((o) => o.status === 'sent') ?? null;
   // Server-derived: 'unlogged' means locked, in the past, no session yet.
   const nextIsPast = next?.done === 'unlogged';
 
@@ -141,12 +145,23 @@ export function ClientHeaderStrip({
               {needs.low_credit_packages > 0 ? (
                 <li className="text-amber-200">
                   Package low — time to re-up
+                  {openOffer ? (
+                    <span className="ml-1 text-xs text-muted-foreground">
+                      · offer sent, awaiting reply
+                    </span>
+                  ) : null}
                 </li>
               ) : null}
             </ul>
           )}
           {needsTotal > 0 ? (
-            <div className="pt-1">
+            <div className="flex flex-wrap gap-2 pt-1">
+              {needs.low_credit_packages > 0 ? (
+                <Button size="sm" variant={openOffer ? 'outline' : 'default'} onClick={onOffer}>
+                  <Send className="h-4 w-4" />
+                  {openOffer ? 'Resend package' : 'Send new package'}
+                </Button>
+              ) : null}
               <Button size="sm" variant="outline" onClick={onReview}>
                 Review
               </Button>
