@@ -29,8 +29,10 @@ export function ClientHeaderStrip({
 }) {
   const next = ws.next_session;
   const needs = ws.needs_attention;
-  const needsTotal =
-    needs.pending_requests + needs.awaiting_payment + needs.unlogged_past + needs.low_credit_packages;
+  // Items the ledger can actually show — a low package is a billing decision,
+  // not a ledger row, so it never sends the coach to "Review".
+  const reviewable = needs.pending_requests + needs.awaiting_payment + needs.unlogged_past;
+  const needsTotal = reviewable + needs.low_credit_packages;
   const owed = ws.balance.owed_cents.total;
   const openOffer = ws.package_offers.find((o) => o.status === 'sent') ?? null;
   // Server-derived: 'unlogged' means locked, in the past, no session yet.
@@ -154,19 +156,28 @@ export function ClientHeaderStrip({
               ) : null}
             </ul>
           )}
-          {needsTotal > 0 ? (
-            <div className="flex flex-wrap gap-2 pt-1">
-              {needs.low_credit_packages > 0 ? (
-                <Button size="sm" variant={openOffer ? 'outline' : 'default'} onClick={onOffer}>
-                  <Send className="h-4 w-4" />
-                  {openOffer ? 'Resend package' : 'Send new package'}
-                </Button>
-              ) : null}
+          {/* The next package is always one click away — a coach sells the
+              re-up before the credits run out, not after. Only the label and
+              the emphasis follow the signal. */}
+          <div className="flex flex-wrap gap-2 pt-1">
+            <Button
+              size="sm"
+              variant={needs.low_credit_packages > 0 && !openOffer ? 'default' : 'outline'}
+              onClick={onOffer}
+            >
+              <Send className="h-4 w-4" />
+              {openOffer
+                ? 'Resend package'
+                : needs.low_credit_packages > 0
+                  ? 'Send new package'
+                  : 'Package options'}
+            </Button>
+            {reviewable > 0 ? (
               <Button size="sm" variant="outline" onClick={onReview}>
                 Review
               </Button>
-            </div>
-          ) : null}
+            ) : null}
+          </div>
         </CardContent>
       </Card>
     </div>
