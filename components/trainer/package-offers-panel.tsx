@@ -1,14 +1,15 @@
 'use client';
 
 import { useState } from 'react';
-import { Send, X } from 'lucide-react';
+import { CheckCircle2, Send, X } from 'lucide-react';
 import { toast } from 'sonner';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { packageOffersApi, type PackageOfferRow } from '@/lib/api/package-offers';
 import { describeApiError } from '@/lib/api';
-import { fmtCents } from './ledger-row-actions';
+import type { MarkPaidMethod } from '@/lib/api/calendar';
+import { MarkPaidFields, fmtCents } from './ledger-row-actions';
 
 const STATUS_VARIANT: Record<PackageOfferRow['status'], 'default' | 'secondary' | 'outline'> = {
   sent: 'default',
@@ -44,6 +45,30 @@ export function PackageOffersPanel({
   onChanged: () => void;
 }) {
   const [busyId, setBusyId] = useState<string | null>(null);
+  // "Mark sold": the client paid off-app (cash / Venmo / Zelle) without tapping
+  // Accept. Same endpoint the client uses, with the coach-only paid fields, so
+  // the package is created AND recorded paid in one step.
+  const [sellingId, setSellingId] = useState<string | null>(null);
+  const [method, setMethod] = useState<MarkPaidMethod>('cash');
+  const [reference, setReference] = useState('');
+
+  async function markSold(id: string) {
+    setBusyId(id);
+    try {
+      await packageOffersApi.accept(id, {
+        mark_paid_method: method,
+        mark_paid_reference: reference.trim() || undefined,
+      });
+      toast.success('Package sold — created and marked paid');
+      setSellingId(null);
+      setReference('');
+      onChanged();
+    } catch (err) {
+      toast.error(describeApiError(err));
+    } finally {
+      setBusyId(null);
+    }
+  }
 
   async function withdraw(id: string) {
     setBusyId(id);
@@ -93,16 +118,41 @@ export function PackageOffersPanel({
                   <p className="mt-1 text-xs italic text-muted-foreground">{o.message}</p>
                 ) : null}
               </div>
-              {o.status === 'sent' ? (
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  disabled={busyId === o.id}
-                  onClick={() => void withdraw(o.id)}
-                >
-                  <X className="h-4 w-4" />
-                  Withdraw
-                </Button>
+              {o.status === 'sent' && sellingId !== o.id ? (
+                <div className="flex gap-1">
+                  <Button
+                    size="sm"
+                    disabled={busyId === o.id}
+                    onClick={() => setSellingId(o.id)}
+                  >
+                    <CheckCircle2 className="h-4 w-4" />
+                    Mark sold
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    disabled={busyId === o.id}
+                    onClick={() => void withdraw(o.id)}
+                  >
+                    <X className="h-4 w-4" />
+                    Withdraw
+                  </Button>
+                </div>
+              ) : null}
+              {o.status === 'sent' && sellingId === o.id ? (
+                <div className="w-full basis-full">
+                  <MarkPaidFields
+                    idPrefix={`offer-sold-${o.id}`}
+                    method={method}
+                    onMethod={setMethod}
+                    notes={reference}
+                    onNotes={setReference}
+                    busy={busyId === o.id}
+                    submitLabel={busyId === o.id ? 'Saving…' : `Sold for ${fmtCents(o.total_price_cents)}`}
+                    onSubmit={() => void markSold(o.id)}
+                    onBack={() => setSellingId(null)}
+                  />
+                </div>
               ) : null}
             </div>
           ))
