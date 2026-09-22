@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, Suspense } from 'react';
+import { useEffect, useState, Suspense } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { ArrowRight } from 'lucide-react';
@@ -35,6 +35,22 @@ function LoginForm() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const [googleBusy, setGoogleBusy] = useState(false);
+
+  // A user who already holds a session with a role has nothing to do here.
+  // Re-running Google sign-in on top of a live coach session is exactly the
+  // path that poisoned the PKCE exchange; send them to their portal instead.
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const user = await getCurrentUser();
+      const role = getRoleFromUser(user);
+      if (!cancelled && role) router.replace(next || rolePathRoot(role));
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [router, next]);
 
   async function onPasswordSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -57,6 +73,8 @@ function LoginForm() {
   }
 
   async function onGoogle() {
+    if (googleBusy) return;
+    setGoogleBusy(true);
     // Students sign in with Google. Route through /auth/callback so the OAuth
     // code becomes a session, then land on /auth/student/accept which runs the
     // idempotent claim: already-bound → straight to /student; first visit with
@@ -66,7 +84,10 @@ function LoginForm() {
     const res = await signInWithGoogle(
       `${origin}/auth/callback?next=${nextPath}`,
     );
-    if (!res.ok) toast.error(res.error ?? 'Could not start Google sign-in.');
+    if (!res.ok) {
+      toast.error(res.error ?? 'Could not start Google sign-in.');
+      setGoogleBusy(false);
+    }
   }
 
   return (
@@ -162,8 +183,9 @@ function LoginForm() {
           className="w-full"
           size="lg"
           onClick={onGoogle}
+          disabled={googleBusy}
         >
-          Continue with Google
+          {googleBusy ? 'Opening Google…' : 'Continue with Google'}
         </Button>
         <p className="mt-2 text-center text-xs text-muted-foreground">
           Students sign in with the Google account their coach invited.
