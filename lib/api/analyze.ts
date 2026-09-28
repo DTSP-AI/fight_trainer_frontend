@@ -4,10 +4,22 @@ import { apiClient } from '@/lib/api';
 export type AnalysisStatus =
   | 'pending'
   | 'processing'
+  | 'extracting'
+  | 'transcribing'
+  | 'analyzing'
+  | 'building_report'
   | 'verified'
   | 'reported'
   | 'completed'
   | 'failed';
+
+/** What kind of video was analyzed (migration 047). Picks the report shape. */
+export type AnalysisContentType = 'full_fight' | 'instructional';
+
+export const CONTENT_TYPE_LABEL: Record<AnalysisContentType, string> = {
+  full_fight: 'Full fight',
+  instructional: 'Instructional',
+};
 
 export interface AnalysisListRow {
   id: string;
@@ -16,6 +28,7 @@ export interface AnalysisListRow {
   youtube_url: string;
   youtube_video_id: string | null;
   student_id: string | null;
+  content_type?: AnalysisContentType | null;
   current_step?: string | null;
   created_at: string;
   completed_at: string | null;
@@ -29,6 +42,7 @@ export interface AnalysisFull {
   youtube_url: string;
   youtube_video_id: string | null;
   sport: string | null;
+  content_type?: AnalysisContentType | null;
   status: AnalysisStatus;
   // DB column is progress_percent; some places return progress_pct.
   progress_percent: number;
@@ -38,7 +52,7 @@ export interface AnalysisFull {
   transcript: string | null;
   verified_fight_data: unknown;
   student_lens: unknown;
-  report: unknown; // FightReport JSON (validated client-side via type narrowing)
+  report: unknown; // FightReport | InstructionalReport JSON, keyed by content_type
   validation: unknown;
   fight_id: string | null;
   created_at: string;
@@ -60,8 +74,11 @@ export interface ChatMessage {
 }
 
 export const analyzeApi = {
-  start: (payload: { youtube_url: string; student_id?: string | null }) =>
-    apiClient.post<AnalysisStartedResponse>('/api/analyze', payload),
+  start: (payload: {
+    youtube_url: string;
+    student_id?: string | null;
+    content_type?: AnalysisContentType;
+  }) => apiClient.post<AnalysisStartedResponse>('/api/analyze', payload),
 
   list: (params?: { student_id?: string; limit?: number }) => {
     const search = new URLSearchParams();

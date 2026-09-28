@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { ArrowRight, Film, Sparkles, Trash2 } from 'lucide-react';
+import { ArrowRight, BookOpen, Film, Sparkles, Swords, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -19,7 +19,12 @@ import {
 } from '@/components/ui/select';
 import { LoadingState } from '@/components/common/loading-state';
 import { EmptyState } from '@/components/common/empty-state';
-import { analyzeApi, type AnalysisListRow } from '@/lib/api/analyze';
+import {
+  analyzeApi,
+  CONTENT_TYPE_LABEL,
+  type AnalysisContentType,
+  type AnalysisListRow,
+} from '@/lib/api/analyze';
 import { studentsApi } from '@/lib/api/students';
 import { describeApiError } from '@/lib/api';
 import { formatDate, formatRelative } from '@/lib/utils';
@@ -27,9 +32,33 @@ import type { Student } from '@/lib/types';
 
 const NO_STUDENT = '__none__';
 
+const CONTENT_TYPES: {
+  value: AnalysisContentType;
+  label: string;
+  blurb: string;
+  icon: React.ReactNode;
+}[] = [
+  {
+    value: 'full_fight',
+    label: 'Full fight',
+    blurb:
+      'Two fighters, a result. Verified against Wikipedia & Sherdog, broken down round by round.',
+    icon: <Swords className="h-5 w-5" />,
+  },
+  {
+    value: 'instructional',
+    label: 'Instructional video',
+    blurb:
+      "A technique breakdown, seminar or film study (Jack Slack, Danaher…). Lead blurb, what's taught in order, takeaways, drills.",
+    icon: <BookOpen className="h-5 w-5" />,
+  },
+];
+
 export default function AnalyzePage() {
   const router = useRouter();
   const [url, setUrl] = useState('');
+  const [contentType, setContentType] =
+    useState<AnalysisContentType>('full_fight');
   const [studentId, setStudentId] = useState<string>(NO_STUDENT);
   const [submitting, setSubmitting] = useState(false);
 
@@ -80,6 +109,7 @@ export default function AnalyzePage() {
     try {
       const res = await analyzeApi.start({
         youtube_url: url.trim(),
+        content_type: contentType,
         student_id: studentId === NO_STUDENT ? null : studentId,
       });
       router.push(`/trainer/analyze/${res.analysis_id}`);
@@ -95,9 +125,9 @@ export default function AnalyzePage() {
       <div>
         <h1 className="text-3xl font-semibold tracking-tight">Fight Analyzer</h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          Paste a YouTube URL. Pick a student to personalize the breakdown to
-          their drilling history. Within ~60 seconds you get a coach-grade
-          report grounded in verified data.
+          Pick what you&apos;re feeding it, paste a YouTube URL, optionally
+          pick a student to personalize it to their drilling history. Within
+          ~60 seconds you get a coach-grade breakdown.
         </p>
       </div>
 
@@ -110,6 +140,46 @@ export default function AnalyzePage() {
         </CardHeader>
         <CardContent>
           <form className="space-y-4" onSubmit={onSubmit}>
+            <div className="space-y-2">
+              <Label>What is this video?</Label>
+              <div
+                role="radiogroup"
+                aria-label="Content type"
+                className="grid gap-2 sm:grid-cols-2"
+              >
+                {CONTENT_TYPES.map((ct) => {
+                  const active = ct.value === contentType;
+                  return (
+                    <button
+                      key={ct.value}
+                      type="button"
+                      role="radio"
+                      aria-checked={active}
+                      onClick={() => setContentType(ct.value)}
+                      className={`flex items-start gap-3 rounded-lg border p-3 text-left transition-colors ${
+                        active
+                          ? 'border-primary bg-primary/10'
+                          : 'border-border bg-card hover:border-primary/40'
+                      }`}
+                    >
+                      <span
+                        className={`mt-0.5 shrink-0 ${active ? 'text-primary' : 'text-muted-foreground'}`}
+                      >
+                        {ct.icon}
+                      </span>
+                      <span className="min-w-0">
+                        <span className="block text-sm font-semibold">
+                          {ct.label}
+                        </span>
+                        <span className="block text-xs text-muted-foreground">
+                          {ct.blurb}
+                        </span>
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
             <div className="space-y-2">
               <Label htmlFor="youtube_url">YouTube URL</Label>
               <Input
@@ -139,12 +209,19 @@ export default function AnalyzePage() {
                 </SelectContent>
               </Select>
               <p className="text-xs text-muted-foreground">
-                With a student selected, training_plan and clips will reference
-                their recent drills.
+                With a student selected, the training plan and clips reference
+                their recent drills
+                {contentType === 'instructional'
+                  ? ', and the coaching insights say which two techniques from the lesson to drill this week.'
+                  : '.'}
               </p>
             </div>
             <Button type="submit" size="lg" disabled={submitting}>
-              {submitting ? 'Starting…' : 'Run analysis'}
+              {submitting
+                ? 'Starting…'
+                : contentType === 'instructional'
+                  ? 'Break down the lesson'
+                  : 'Run analysis'}
               {!submitting ? <ArrowRight className="h-4 w-4" /> : null}
             </Button>
           </form>
@@ -191,6 +268,10 @@ export default function AnalyzePage() {
                         {a.youtube_url}
                       </div>
                       <div className="mt-1 flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
+                        <span className="font-medium text-foreground/80">
+                          {CONTENT_TYPE_LABEL[a.content_type ?? 'full_fight']}
+                        </span>
+                        <span>·</span>
                         <span>{formatDate(a.created_at)}</span>
                         <span>·</span>
                         <span>{formatRelative(a.created_at)}</span>
@@ -211,7 +292,7 @@ export default function AnalyzePage() {
                             : 'secondary'
                       }
                     >
-                      {a.status} {a.progress_percent}%
+                      {a.status.replace('_', ' ')} {a.progress_percent}%
                     </Badge>
                   </div>
                 </Link>
