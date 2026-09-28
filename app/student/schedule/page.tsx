@@ -13,6 +13,11 @@ import { toast } from 'sonner';
 import { LoadingState } from '@/components/common/loading-state';
 import { EmptyState } from '@/components/common/empty-state';
 import { PushToggle } from '@/components/common/push-toggle';
+import {
+  CALENDAR_SYNC_ANCHOR,
+  CalendarSyncCard,
+  useCalendarSync,
+} from '@/components/student/calendar-sync-card';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -111,6 +116,7 @@ function StudentScheduleContent() {
   const [packages, setPackages] = useState<PackageRow[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [pickedSlot, setPickedSlot] = useState<AvailableSlot | null>(null);
+  const calendarSync = useCalendarSync();
 
   const refresh = useCallback(async () => {
     try {
@@ -162,6 +168,14 @@ function StudentScheduleContent() {
       await refresh();
     })();
   }, [justPaid, refresh]);
+
+  // Deep link from the layout nudge lands on the card once it renders.
+  useEffect(() => {
+    if (!events || window.location.hash !== `#${CALENDAR_SYNC_ANCHOR}`) return;
+    document
+      .getElementById(CALENDAR_SYNC_ANCHOR)
+      ?.scrollIntoView({ behavior: 'smooth' });
+  }, [events]);
 
   const { upcoming, past } = useMemo(
     () => bucketEvents(events ?? []),
@@ -258,12 +272,28 @@ function StudentScheduleContent() {
         onBooked={() => {
           setPickedSlot(null);
           void refresh();
+          // "Here and there": right after a booking is when they care.
+          if (calendarSync.status && !calendarSync.status.synced) {
+            toast('Want this on your phone?', {
+              description:
+                'Subscribe once and every session lands on your calendar.',
+              action: {
+                label: 'Add to calendar',
+                onClick: () =>
+                  document
+                    .getElementById(CALENDAR_SYNC_ANCHOR)
+                    ?.scrollIntoView({ behavior: 'smooth' }),
+              },
+            });
+          }
         }}
         onSlotTaken={() => {
           setPickedSlot(null);
           void refresh();
         }}
       />
+
+      <CalendarSyncCard sync={calendarSync} />
 
       <section className="space-y-2">
         <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">

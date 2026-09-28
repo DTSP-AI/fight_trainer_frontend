@@ -12,6 +12,7 @@ import {
 } from 'lucide-react';
 import { AppShell, type NavGroup } from '@/components/common/app-shell';
 import { RoleGate } from '@/components/common/role-gate';
+import { CalendarNudge } from '@/components/student/calendar-nudge';
 import { IntakeReminder } from '@/components/student/intake-reminder';
 import { PackageOfferCta } from '@/components/student/package-offer-cta';
 
@@ -61,6 +62,7 @@ export default function StudentLayout({
         ]}
       >
         <IntakeReminder />
+        <CalendarNudge />
         <PackageOfferCta />
         {children}
       </AppShell>
