@@ -4,6 +4,7 @@ import { useMemo, useState } from 'react';
 import Link from 'next/link';
 import {
   Bell,
+  CalendarClock,
   Check,
   CircleSlash,
   Copy,
@@ -256,7 +257,7 @@ function toLocalInput(iso: string): string {
   return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`;
 }
 
-type Panel = 'none' | 'approve' | 'markPaidApprove' | 'markPaidSettle' | 'decline' | 'edit';
+type Panel = 'none' | 'approve' | 'markPaidApprove' | 'markPaidSettle' | 'decline' | 'declineReschedule' | 'edit';
 
 function LedgerRowView({
   row,
@@ -323,6 +324,14 @@ function LedgerRowView({
           {row.cancellation_reason ? (
             <div className="mt-1 text-xs text-muted-foreground">{row.cancellation_reason}</div>
           ) : null}
+          {isOpen && row.proposed_for ? (
+            <div className="mt-1 text-xs text-fuchsia-200">
+              Move requested → {fmtWhen(row.proposed_for)}
+              {row.reschedule_note ? (
+                <span className="text-muted-foreground"> · {row.reschedule_note}</span>
+              ) : null}
+            </div>
+          ) : null}
         </td>
         <td className="px-3 py-2 align-top">
           <PaidChip row={row} />
@@ -357,6 +366,19 @@ function LedgerRowView({
                 </Button>
                 <Button size="sm" variant="ghost" disabled={busy} onClick={() => void actions.setStatus(row.id, 'cancelled')}>
                   <X className="h-4 w-4" />
+                </Button>
+              </>
+            ) : null}
+
+            {isOpen && row.proposed_for && panel === 'none' ? (
+              <>
+                <Button size="sm" disabled={busy} onClick={() => void actions.approveReschedule(row.id)}>
+                  <CalendarClock className="h-4 w-4" />
+                  Approve move
+                </Button>
+                <Button size="sm" variant="ghost" disabled={busy} onClick={() => setPanel('declineReschedule')}>
+                  <ThumbsDown className="h-4 w-4" />
+                  Keep original
                 </Button>
               </>
             ) : null}
@@ -593,6 +615,34 @@ function LedgerRowView({
                       }}
                     >
                       Decline request
+                    </Button>
+                    <Button size="sm" variant="ghost" disabled={busy} onClick={reset}>
+                      Back
+                    </Button>
+                  </div>
+                </div>
+              ) : null}
+
+              {panel === 'declineReschedule' ? (
+                <div className="space-y-2">
+                  <Label htmlFor={`decline-move-${row.id}`}>Reason (optional)</Label>
+                  <Textarea
+                    id={`decline-move-${row.id}`}
+                    rows={2}
+                    value={declineReason}
+                    onChange={(e) => setDeclineReason(e.target.value)}
+                    placeholder="That hour's taken — Thursday works?"
+                  />
+                  <div className="flex gap-2">
+                    <Button
+                      size="sm"
+                      variant="destructive"
+                      disabled={busy}
+                      onClick={() => {
+                        void actions.declineReschedule(row.id, declineReason).then(reset);
+                      }}
+                    >
+                      Keep original time
                     </Button>
                     <Button size="sm" variant="ghost" disabled={busy} onClick={reset}>
                       Back

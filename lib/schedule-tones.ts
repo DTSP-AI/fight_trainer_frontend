@@ -15,6 +15,7 @@ export type ScheduleTone =
   | 'awaiting_payment'
   | 'scheduled'
   | 'confirmed'
+  | 'reschedule_requested'
   | 'completed'
   | 'no_show'
   | 'cancelled'
@@ -34,6 +35,8 @@ export const TONES: Record<ScheduleTone, string> = {
     'border-sky-500/50 bg-sky-500/15 text-sky-100 hover:bg-sky-500/25',
   confirmed:
     'border-blue-500/50 bg-blue-500/15 text-blue-100 hover:bg-blue-500/25',
+  reschedule_requested:
+    'border-fuchsia-500/50 bg-fuchsia-500/15 text-fuchsia-100 hover:bg-fuchsia-500/25',
   completed:
     'border-emerald-500/50 bg-emerald-500/15 text-emerald-100 hover:bg-emerald-500/25',
   no_show:
@@ -55,6 +58,7 @@ export const TONE_DOTS: Record<ScheduleTone, string> = {
   awaiting_payment: 'bg-orange-500',
   scheduled: 'bg-sky-500',
   confirmed: 'bg-blue-500',
+  reschedule_requested: 'bg-fuchsia-500',
   completed: 'bg-emerald-500',
   no_show: 'bg-amber-500',
   cancelled: 'bg-rose-500',
@@ -69,6 +73,7 @@ export const STATUS_LABEL: Record<ScheduleTone, string> = {
   awaiting_payment: 'Approved · awaiting payment',
   scheduled: 'Scheduled',
   confirmed: 'Scheduled',
+  reschedule_requested: 'Scheduled · move requested',
   completed: 'Logged',
   no_show: 'No-show',
   cancelled: 'Cancelled',
@@ -83,6 +88,11 @@ export function eventTone(ev: CalendarEvent): ScheduleTone {
     return ev.fulfilled_session_id ? 'plan_done' : 'planned';
   }
   const status = ev.status ?? 'scheduled';
+  // A locked session with an open move request keeps its status (the
+  // original slot is still held) but renders as its own tone.
+  if ((status === 'scheduled' || status === 'confirmed') && ev.proposed_for) {
+    return 'reschedule_requested';
+  }
   return status in TONES ? (status as ScheduleTone) : 'scheduled';
 }
 

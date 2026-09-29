@@ -7,6 +7,7 @@ import {
   Check,
   ChevronLeft,
   ChevronRight,
+  CalendarClock,
   CircleSlash,
   CreditCard,
   Dumbbell,
@@ -150,6 +151,7 @@ const TRAINER_LEGEND: ScheduleTone[] = [
   'pending_approval',
   'awaiting_payment',
   'scheduled',
+  'reschedule_requested',
   'completed',
   'no_show',
   'cancelled',
@@ -191,7 +193,12 @@ interface Props {
   mode?: 'trainer' | 'student';
   onPickSlot?: (slot: AvailableSlot) => void;
   onPay?: (ev: ScheduledEvent) => void;
+  /** Client withdraws a pending / unpaid request. */
   onCancelRequest?: (ev: ScheduledEvent) => void;
+  /** Client cancels a locked session (subject to the coach's cutoff). */
+  onCancelSession?: (ev: ScheduledEvent) => void;
+  /** Client asks to move a request or a locked session to another open slot. */
+  onProposeTime?: (ev: ScheduledEvent) => void;
 }
 
 export function SessionsCalendar({
@@ -206,6 +213,8 @@ export function SessionsCalendar({
   onPickSlot,
   onPay,
   onCancelRequest,
+  onCancelSession,
+  onProposeTime,
 }: Props) {
   const today = useMemo(() => new Date(), []);
   const [cursor, setCursor] = useState<Date>(() => startOfMonth(today));
@@ -419,6 +428,8 @@ export function SessionsCalendar({
         }}
         onPay={onPay}
         onCancelRequest={onCancelRequest}
+        onCancelSession={onCancelSession}
+        onProposeTime={onProposeTime}
       />
     </div>
   );
@@ -432,6 +443,7 @@ type Panel =
   | 'none'
   | 'approve'
   | 'decline'
+  | 'declineReschedule'
   | 'markPaidApprove'
   | 'markPaidSettle';
 
@@ -454,6 +466,9 @@ function studentNextStep(s: ScheduledEvent): string {
       return 'Your coach approved it. Settle the payment and the spot is locked in.';
     case 'scheduled':
     case 'confirmed':
+      if (s.proposed_for) {
+        return `You asked to move this to ${fmtWhenFull(s.proposed_for)}. The original time stays booked until your coach answers.`;
+      }
       return "You're locked in. See you on the mats.";
     case 'declined':
       return 'Your coach declined this request. Pick another open spot.';
@@ -478,6 +493,8 @@ function EventDetailDialog({
   onChanged,
   onPay,
   onCancelRequest,
+  onCancelSession,
+  onProposeTime,
 }: {
   event: CalendarEvent | null;
   student?: Student;
@@ -488,6 +505,8 @@ function EventDetailDialog({
   onChanged: () => void;
   onPay?: (ev: ScheduledEvent) => void;
   onCancelRequest?: (ev: ScheduledEvent) => void;
+  onCancelSession?: (ev: ScheduledEvent) => void;
+  onProposeTime?: (ev: ScheduledEvent) => void;
 }) {
   const router = useRouter();
   const [editing, setEditing] = useState(false);
@@ -555,6 +574,18 @@ function EventDetailDialog({
   async function remind() {
     if (!scheduled) return;
     await actions.remind(scheduled.id);
+  }
+
+  async function approveReschedule() {
+    if (!scheduled) return;
+    await actions.approveReschedule(scheduled.id);
+    resetPanels();
+  }
+
+  async function declineReschedule() {
+    if (!scheduled) return;
+    await actions.declineReschedule(scheduled.id, declineReason);
+    resetPanels();
   }
 
   async function markDone() {
@@ -698,6 +729,15 @@ function EventDetailDialog({
               Cancelled: {scheduled.cancellation_reason}
             </p>
           ) : null}
+          {scheduled?.proposed_for && isOpenScheduled ? (
+            <p className="rounded-md border border-fuchsia-500/40 bg-fuchsia-500/5 p-3 text-xs">
+              <span className="font-medium">Move requested:</span>{' '}
+              {fmtWhenFull(scheduled.proposed_for)}
+              {scheduled.reschedule_note ? (
+                <span className="text-muted-foreground"> · {scheduled.reschedule_note}</span>
+              ) : null}
+            </p>
+          ) : null}
           {!isTrainer && scheduled ? (
             <p className="rounded-md border border-border bg-background/40 p-3 text-xs text-muted-foreground">
               {studentNextStep(scheduled)}
@@ -709,6 +749,43 @@ function EventDetailDialog({
             </p>
           ) : null}
         </div>
+        ) : null}
+
+        {/* ── Coach: answer a move request ── */}
+        {!editing && isTrainer && scheduled && isOpenScheduled && scheduled.proposed_for ? (
+          <div className="space-y-2 rounded-md border border-fuchsia-500/40 bg-fuchsia-500/5 p-3">
+            {panel === 'declineReschedule' ? (
+              <div className="space-y-2">
+                <Label htmlFor="decline-reschedule-reason">Reason (optional)</Label>
+                <Textarea
+                  id="decline-reschedule-reason"
+                  rows={2}
+                  value={declineReason}
+                  onChange={(e) => setDeclineReason(e.target.value)}
+                  placeholder="That hour's taken — Thursday works?"
+                />
+                <div className="flex gap-2">
+                  <Button size="sm" variant="destructive" disabled={busy} onClick={() => void declineReschedule()}>
+                    Keep original time
+                  </Button>
+                  <Button size="sm" variant="ghost" disabled={busy} onClick={() => setPanel('none')}>
+                    Back
+                  </Button>
+                </div>
+              </div>
+            ) : (
+              <div className="flex flex-wrap gap-2">
+                <Button size="sm" disabled={busy} onClick={() => void approveReschedule()}>
+                  <CalendarClock className="h-4 w-4" />
+                  Approve move
+                </Button>
+                <Button size="sm" variant="ghost" disabled={busy} onClick={() => setPanel('declineReschedule')}>
+                  <ThumbsDown className="h-4 w-4" />
+                  Keep original
+                </Button>
+              </div>
+            )}
+          </div>
         ) : null}
 
         {/* ── Coach booking actions ── */}
@@ -894,6 +971,16 @@ function EventDetailDialog({
                 Pay now
               </Button>
             ) : null}
+            {(isPending || isOpenScheduled) && onProposeTime ? (
+              <Button
+                variant="outline"
+                disabled={busy}
+                onClick={() => onProposeTime(scheduled)}
+              >
+                <CalendarClock className="h-4 w-4" />
+                {scheduled.proposed_for && isOpenScheduled ? 'Change proposed time' : 'Propose new time'}
+              </Button>
+            ) : null}
             {(isPending || isAwaitingPayment) && onCancelRequest ? (
               <Button
                 variant="ghost"
@@ -902,6 +989,16 @@ function EventDetailDialog({
               >
                 <X className="h-4 w-4" />
                 Cancel request
+              </Button>
+            ) : null}
+            {isOpenScheduled && !scheduled.fulfilled_session_id && onCancelSession ? (
+              <Button
+                variant="ghost"
+                disabled={busy}
+                onClick={() => onCancelSession(scheduled)}
+              >
+                <X className="h-4 w-4" />
+                Cancel session
               </Button>
             ) : null}
           </div>

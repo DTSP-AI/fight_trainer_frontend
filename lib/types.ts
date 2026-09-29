@@ -560,6 +560,11 @@ export interface LedgerRow {
   declined_at?: string | null;
   decline_reason?: string | null;
   cancellation_reason?: string | null;
+  // Client reschedule proposal (migration 049). NULL = none open. The
+  // original scheduled_for stays booked until the coach approves.
+  proposed_for?: string | null;
+  reschedule_requested_at?: string | null;
+  reschedule_note?: string | null;
   done: LedgerDoneState;
   paid: LedgerPaid;
 }

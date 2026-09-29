@@ -42,6 +42,11 @@ export interface ScheduledEvent extends CalendarEventBase {
   declined_at?: string | null;
   decline_reason?: string | null;
   cancellation_reason?: string | null;
+  // Client reschedule proposal (migration 049). NULL = none open. The
+  // original scheduled_for stays booked until the coach approves.
+  proposed_for?: string | null;
+  reschedule_requested_at?: string | null;
+  reschedule_note?: string | null;
 }
 
 export interface PlannedEvent extends CalendarEventBase {
@@ -276,6 +281,30 @@ export const bookingApi = {
   cancelRequest: (sessionId: string, payload: { reason?: string } = {}) =>
     apiClient.post<ScheduledSessionRow>(
       `${SESSIONS}/${encodeURIComponent(sessionId)}/cancel-request`,
+      payload,
+    ),
+  /** Client cancels any of their own rows. Locked sessions only outside
+   *  the coach's cutoff — inside it the API answers CANCEL_WINDOW_CLOSED. */
+  cancel: (sessionId: string, payload: { reason?: string } = {}) =>
+    apiClient.post<ScheduledSessionRow>(
+      `${SESSIONS}/${encodeURIComponent(sessionId)}/cancel`,
+      payload,
+    ),
+  /** Client asks to move a session to another OPEN slot. Pending requests
+   *  just move; locked sessions record a proposal for the coach. */
+  proposeTime: (sessionId: string, payload: { proposed_for: string; note?: string }) =>
+    apiClient.post<ScheduledSessionRow>(
+      `${SESSIONS}/${encodeURIComponent(sessionId)}/propose-time`,
+      payload,
+    ),
+  approveReschedule: (sessionId: string) =>
+    apiClient.post<ScheduledSessionRow>(
+      `${SESSIONS}/${encodeURIComponent(sessionId)}/reschedule/approve`,
+      {},
+    ),
+  declineReschedule: (sessionId: string, payload: { reason?: string } = {}) =>
+    apiClient.post<ScheduledSessionRow>(
+      `${SESSIONS}/${encodeURIComponent(sessionId)}/reschedule/decline`,
       payload,
     ),
 };
