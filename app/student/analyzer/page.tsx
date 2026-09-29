@@ -7,7 +7,11 @@ import { LoadingState } from '@/components/common/loading-state';
 import { EmptyState } from '@/components/common/empty-state';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { analyzeApi, type AnalysisListRow } from '@/lib/api/analyze';
+import {
+  analyzeApi,
+  CONTENT_TYPE_LABEL,
+  type AnalysisListRow,
+} from '@/lib/api/analyze';
 import { describeApiError } from '@/lib/api';
 
 function fmtDate(iso?: string | null): string {
@@ -52,8 +56,8 @@ export default function StudentAnalyzerPage() {
       <div>
         <h1 className="text-3xl font-semibold tracking-tight">Analyzer</h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          Fight breakdowns your coach has run for you. Tap one to read the full
-          report and chat with the analyzer.
+          Fight breakdowns and lesson study guides your coach has run for
+          you. Tap one to read the full report and discuss it.
         </p>
       </div>
 
@@ -67,7 +71,7 @@ export default function StudentAnalyzerPage() {
           {analyses.map((a) => (
             <Link
               key={a.id}
-              href={`/trainer/analyze/${a.id}`}
+              href={`/student/analyzer/${a.id}`}
               className="block"
             >
               <Card className="transition-colors hover:border-primary/50">
@@ -85,6 +89,7 @@ export default function StudentAnalyzerPage() {
                         : 'Fight analysis'}
                     </div>
                     <div className="mt-0.5 text-xs text-muted-foreground">
+                      {CONTENT_TYPE_LABEL[a.content_type ?? 'full_fight']} ·{' '}
                       Created {fmtDate(a.created_at)}
                       {a.completed_at
                         ? ` · finished ${fmtDate(a.completed_at)}`

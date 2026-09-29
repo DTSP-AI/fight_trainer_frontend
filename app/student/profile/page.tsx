@@ -1,8 +1,13 @@
 'use client';
 
+import {
+  CalendarSyncCard,
+  useCalendarSync,
+} from '@/components/student/calendar-sync-card';
 import { ProfileView } from '@/components/student/profile-view';
 
 export default function StudentProfilePage() {
+  const calendarSync = useCalendarSync();
   return (
     <div className="mx-auto max-w-3xl space-y-6">
       <div>
@@ -12,6 +17,7 @@ export default function StudentProfilePage() {
         </p>
       </div>
       <ProfileView />
+      <CalendarSyncCard sync={calendarSync} />
     </div>
   );
 }

@@ -13,6 +13,11 @@ import { toast } from 'sonner';
 import { LoadingState } from '@/components/common/loading-state';
 import { EmptyState } from '@/components/common/empty-state';
 import { PushToggle } from '@/components/common/push-toggle';
+import {
+  CALENDAR_SYNC_ANCHOR,
+  CalendarSyncCard,
+  useCalendarSync,
+} from '@/components/student/calendar-sync-card';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -111,6 +116,8 @@ function StudentScheduleContent() {
   const [packages, setPackages] = useState<PackageRow[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [pickedSlot, setPickedSlot] = useState<AvailableSlot | null>(null);
+  const [moveTarget, setMoveTarget] = useState<ScheduledEvent | null>(null);
+  const calendarSync = useCalendarSync();
 
   const refresh = useCallback(async () => {
     try {
@@ -163,6 +170,14 @@ function StudentScheduleContent() {
     })();
   }, [justPaid, refresh]);
 
+  // Deep link from the layout nudge lands on the card once it renders.
+  useEffect(() => {
+    if (!events || window.location.hash !== `#${CALENDAR_SYNC_ANCHOR}`) return;
+    document
+      .getElementById(CALENDAR_SYNC_ANCHOR)
+      ?.scrollIntoView({ behavior: 'smooth' });
+  }, [events]);
+
   const { upcoming, past } = useMemo(
     () => bucketEvents(events ?? []),
     [events],
@@ -201,11 +216,31 @@ function StudentScheduleContent() {
   async function cancelRequest(ev: ScheduledEvent) {
     if (!window.confirm('Cancel this request?')) return;
     try {
-      await bookingApi.cancelRequest(ev.id);
+      await bookingApi.cancel(ev.id);
       toast.success('Request cancelled');
       void refresh();
     } catch (err) {
       toast.error(describeApiError(err));
+    }
+  }
+
+  async function cancelSession(ev: ScheduledEvent) {
+    const covered = ev.package_id
+      ? 'Your package credit comes back.'
+      : 'If you already paid, your coach will sort the refund with you.';
+    if (!window.confirm(`Cancel your ${fmtWhen(ev.starts_at)} session? ${covered}`)) return;
+    try {
+      await bookingApi.cancel(ev.id);
+      toast.success('Session cancelled', { description: covered });
+      void refresh();
+    } catch (err) {
+      if (err instanceof ApiClientError && err.code === 'CANCEL_WINDOW_CLOSED') {
+        toast.error('Too close to the session to cancel here', {
+          description: 'Message your coach — only they can cancel it now.',
+        });
+      } else {
+        toast.error(describeApiError(err));
+      }
     }
   }
 
@@ -244,6 +279,8 @@ function StudentScheduleContent() {
             onPickSlot={setPickedSlot}
             onPay={pay}
             onCancelRequest={cancelRequest}
+            onCancelSession={cancelSession}
+            onProposeTime={setMoveTarget}
           />
         </CardContent>
       </Card>
@@ -258,12 +295,39 @@ function StudentScheduleContent() {
         onBooked={() => {
           setPickedSlot(null);
           void refresh();
+          // "Here and there": right after a booking is when they care.
+          if (calendarSync.status && !calendarSync.status.synced) {
+            toast('Want this on your phone?', {
+              description:
+                'Subscribe once and every session lands on your calendar.',
+              action: {
+                label: 'Add to calendar',
+                onClick: () =>
+                  document
+                    .getElementById(CALENDAR_SYNC_ANCHOR)
+                    ?.scrollIntoView({ behavior: 'smooth' }),
+              },
+            });
+          }
         }}
         onSlotTaken={() => {
           setPickedSlot(null);
           void refresh();
         }}
       />
+
+      <ProposeTimeDialog
+        key={moveTarget?.id ?? 'no-move'}
+        target={moveTarget}
+        slots={slots}
+        onClose={() => setMoveTarget(null)}
+        onDone={() => {
+          setMoveTarget(null);
+          void refresh();
+        }}
+      />
+
+      <CalendarSyncCard sync={calendarSync} />
 
       <section className="space-y-2">
         <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
@@ -426,6 +490,118 @@ function RequestSessionDialog({
           </Button>
           <Button disabled={busy || !serviceId} onClick={() => void submit()}>
             {busy ? 'Sending…' : 'Send request'}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// ============================================================================
+// Propose-time dialog — move a request or a locked session to an open slot
+// ============================================================================
+
+function ProposeTimeDialog({
+  target,
+  slots,
+  onClose,
+  onDone,
+}: {
+  target: ScheduledEvent | null;
+  slots: AvailableSlot[];
+  onClose: () => void;
+  onDone: () => void;
+}) {
+  const [startsAt, setStartsAt] = useState('');
+  const [note, setNote] = useState('');
+  const [busy, setBusy] = useState(false);
+
+  if (!target) return null;
+
+  const isLocked = target.status === 'scheduled' || target.status === 'confirmed';
+  const options = slots.filter((s) => s.starts_at !== target.starts_at);
+
+  async function submit() {
+    if (!target || !startsAt) return;
+    setBusy(true);
+    try {
+      await bookingApi.proposeTime(target.id, {
+        proposed_for: startsAt,
+        ...(note.trim() ? { note: note.trim() } : {}),
+      });
+      toast.success(
+        isLocked ? 'Sent — waiting on your coach' : 'Request moved',
+        isLocked
+          ? { description: 'Your original time stays booked until they answer.' }
+          : undefined,
+      );
+      onDone();
+    } catch (err) {
+      if (err instanceof ApiClientError && err.code === 'SLOT_TAKEN') {
+        toast.error('That spot was just taken — pick another');
+        onDone();
+      } else {
+        toast.error(describeApiError(err));
+      }
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Dialog open onOpenChange={(o) => (!o ? onClose() : undefined)}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>{isLocked ? 'Ask to move this session' : 'Move this request'}</DialogTitle>
+          <DialogDescription>
+            Currently {fmtWhen(target.starts_at)}.{' '}
+            {isLocked
+              ? 'Your coach has to approve the new time. Until then the original stays booked, and the new spot is not held for you.'
+              : 'Nothing is locked yet, so this just moves your request.'}
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="space-y-3">
+          <div className="space-y-2">
+            <Label>New time</Label>
+            {options.length === 0 ? (
+              <p className="text-xs text-muted-foreground">
+                No other open spots right now. Check back when your coach opens more.
+              </p>
+            ) : (
+              <Select value={startsAt} onValueChange={setStartsAt}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Pick an open spot" />
+                </SelectTrigger>
+                <SelectContent>
+                  {options.map((s) => (
+                    <SelectItem key={s.starts_at} value={s.starts_at}>
+                      {fmtWhen(s.starts_at)} · {s.duration_minutes} min
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="move-note">Why? (optional)</Label>
+            <Textarea
+              id="move-note"
+              rows={2}
+              value={note}
+              onChange={(e) => setNote(e.target.value)}
+              placeholder="Work ran over — can we do the later slot?"
+            />
+          </div>
+        </div>
+
+        <DialogFooter>
+          <Button variant="ghost" disabled={busy} onClick={onClose}>
+            Never mind
+          </Button>
+          <Button disabled={busy || !startsAt} onClick={() => void submit()}>
+            {busy ? 'Sending…' : isLocked ? 'Ask to move' : 'Move request'}
           </Button>
         </DialogFooter>
       </DialogContent>

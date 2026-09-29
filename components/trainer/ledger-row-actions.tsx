@@ -272,6 +272,38 @@ export function useBookingActions({
     });
   }
 
+  /** Coach accepts the client's proposed time. The proposed slot was never
+   *  held, so a lost race comes back as SLOT_TAKEN with the proposal intact. */
+  async function approveReschedule(id: string) {
+    await run(async () => {
+      try {
+        const row = await bookingApi.approveReschedule(id);
+        toast.success(`Moved to ${fmtWhen(row.scheduled_for)}`);
+        onChanged();
+      } catch (err) {
+        if (err instanceof ApiClientError && err.code === 'SLOT_TAKEN') {
+          toast.error('That time was taken since they asked — keep the original or have them pick again.');
+        } else if (err instanceof ApiClientError && err.code === 'SLOT_NOT_OFFERED') {
+          toast.error('That time is no longer open on your availability.');
+        } else {
+          toast.error(describeApiError(err));
+        }
+      }
+    });
+  }
+
+  async function declineReschedule(id: string, reason?: string) {
+    await run(async () => {
+      try {
+        await bookingApi.declineReschedule(id, reason?.trim() ? { reason: reason.trim() } : {});
+        toast.success('Kept the original time');
+        onChanged();
+      } catch (err) {
+        toast.error(describeApiError(err));
+      }
+    });
+  }
+
   async function deleteBooking(id: string) {
     if (!window.confirm('Delete this session? This cannot be undone.')) return;
     await run(async () => {
@@ -297,6 +329,8 @@ export function useBookingActions({
     setStatus,
     reschedule,
     repeatNextWeek,
+    approveReschedule,
+    declineReschedule,
     deleteBooking,
   };
 }
