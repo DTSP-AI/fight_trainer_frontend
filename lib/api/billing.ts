@@ -93,6 +93,8 @@ export interface ScheduledSessionUpdateRequest {
   status?: ScheduleStatus;
   notes?: string;
   cancellation_reason?: string;
+  /** With status 'no_show': true burns one package credit (coach's call). */
+  burn_credit?: boolean;
 }
 
 // ============================================================================
