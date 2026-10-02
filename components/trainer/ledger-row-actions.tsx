@@ -203,12 +203,28 @@ export function useBookingActions({
     });
   }
 
-  /** The only statuses PATCH accepts. */
-  async function setStatus(id: string, next: 'no_show' | 'cancelled') {
+  /** The only statuses PATCH accepts. A booking burns no package credit
+   *  until it is marked done; `burnCredit` is the coach charging a no-show
+   *  one anyway. */
+  async function setStatus(
+    id: string,
+    next: 'no_show' | 'cancelled',
+    opts: { burnCredit?: boolean } = {},
+  ) {
     await run(async () => {
       try {
-        await billingApi.updateSchedule(id, { status: next });
-        toast.success(next === 'no_show' ? 'Marked no-show' : 'Cancelled');
+        const burn = next === 'no_show' && opts.burnCredit === true;
+        await billingApi.updateSchedule(id, {
+          status: next,
+          ...(burn ? { burn_credit: true } : {}),
+        });
+        toast.success(
+          next === 'cancelled'
+            ? 'Cancelled'
+            : burn
+              ? 'Marked no-show — credit burned'
+              : 'Marked no-show',
+        );
         onChanged();
       } catch (err) {
         toast.error(describeApiError(err));

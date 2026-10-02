@@ -445,7 +445,8 @@ type Panel =
   | 'decline'
   | 'declineReschedule'
   | 'markPaidApprove'
-  | 'markPaidSettle';
+  | 'markPaidSettle'
+  | 'noShow';
 
 /** One line summarising where the money stands on a scheduled session. */
 function paymentLine(s: ScheduledEvent): string | null {
@@ -537,9 +538,12 @@ function EventDetailDialog({
     setPackageExhausted(false);
   }
 
-  async function setStatus(next: 'no_show' | 'cancelled') {
+  async function setStatus(
+    next: 'no_show' | 'cancelled',
+    opts: { burnCredit?: boolean } = {},
+  ) {
     if (!scheduled) return;
-    await actions.setStatus(scheduled.id, next);
+    await actions.setStatus(scheduled.id, next, opts);
   }
 
   async function approve(body: ApproveBody) {
@@ -1007,7 +1011,35 @@ function EventDetailDialog({
         {!editing ? (
         <DialogFooter className="flex-col gap-2 sm:flex-col sm:items-stretch">
           {/* Primary action row — Mark Done is the everyday path. */}
-          {showEverydayActions ? (
+          {showEverydayActions && panel === 'noShow' ? (
+            <div className="space-y-2">
+              <p className="text-xs font-medium text-muted-foreground">
+                No-show — does it cost them a package credit?
+              </p>
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  disabled={busy}
+                  onClick={() => {
+                    void setStatus('no_show', { burnCredit: true }).then(resetPanels);
+                  }}
+                >
+                  Burn a credit
+                </Button>
+                <Button
+                  variant="outline"
+                  disabled={busy}
+                  onClick={() => {
+                    void setStatus('no_show').then(resetPanels);
+                  }}
+                >
+                  Keep the credit
+                </Button>
+                <Button variant="ghost" disabled={busy} onClick={resetPanels}>
+                  Back
+                </Button>
+              </div>
+            </div>
+          ) : showEverydayActions ? (
             <div className="flex flex-wrap gap-2">
               <Button onClick={markDone} disabled={busy} className="flex-1">
                 <Check className="h-4 w-4" />
@@ -1018,7 +1050,11 @@ function EventDetailDialog({
                   <Button
                     variant="outline"
                     disabled={busy}
-                    onClick={() => void setStatus('no_show')}
+                    onClick={() =>
+                      // A package-funded no-show is the coach's call: burn
+                      // the credit or let the client keep it.
+                      scheduled?.package_id ? setPanel('noShow') : void setStatus('no_show')
+                    }
                   >
                     <CircleSlash className="h-4 w-4" />
                     No-show

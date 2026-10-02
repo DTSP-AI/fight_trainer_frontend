@@ -257,7 +257,7 @@ function toLocalInput(iso: string): string {
   return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`;
 }
 
-type Panel = 'none' | 'approve' | 'markPaidApprove' | 'markPaidSettle' | 'decline' | 'declineReschedule' | 'edit';
+type Panel = 'none' | 'approve' | 'markPaidApprove' | 'markPaidSettle' | 'decline' | 'declineReschedule' | 'edit' | 'noShow';
 
 function LedgerRowView({
   row,
@@ -404,7 +404,16 @@ function LedgerRowView({
                 <Button asChild size="sm" variant="outline" disabled={busy}>
                   <Link href={logHref}>Log details</Link>
                 </Button>
-                <Button size="sm" variant="outline" disabled={busy} onClick={() => void actions.setStatus(row.id, 'no_show')}>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={busy}
+                  onClick={() =>
+                    // A package-funded no-show is the coach's call: burn the
+                    // credit or let the client keep it.
+                    row.package_id ? setPanel('noShow') : void actions.setStatus(row.id, 'no_show')
+                  }
+                >
                   <CircleSlash className="h-4 w-4" />
                   No-show
                 </Button>
@@ -590,6 +599,38 @@ function LedgerRowView({
                     </Button>
                     <Button size="sm" variant="ghost" disabled={busy} onClick={reset}>
                       Cancel
+                    </Button>
+                  </div>
+                </div>
+              ) : null}
+
+              {panel === 'noShow' ? (
+                <div className="space-y-2">
+                  <p className="text-xs font-medium text-muted-foreground">
+                    No-show — does it cost them a package credit?
+                  </p>
+                  <div className="flex flex-wrap gap-2">
+                    <Button
+                      size="sm"
+                      disabled={busy}
+                      onClick={() => {
+                        void actions.setStatus(row.id, 'no_show', { burnCredit: true }).then(reset);
+                      }}
+                    >
+                      Burn a credit
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      disabled={busy}
+                      onClick={() => {
+                        void actions.setStatus(row.id, 'no_show').then(reset);
+                      }}
+                    >
+                      Keep the credit
+                    </Button>
+                    <Button size="sm" variant="ghost" disabled={busy} onClick={reset}>
+                      Back
                     </Button>
                   </div>
                 </div>
