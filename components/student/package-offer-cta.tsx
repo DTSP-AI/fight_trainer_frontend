@@ -89,6 +89,14 @@ export function PackageOfferCta({ onChanged }: { onChanged?: () => void } = {}) 
         <PackageOpen className="mt-0.5 h-5 w-5 shrink-0 text-primary" />
         <div className="min-w-0 flex-1 space-y-1">
           <p className="font-medium">Your coach sent you your next package</p>
+          {offer.image_url ? (
+            // eslint-disable-next-line @next/next/no-img-element -- coach-supplied URL in Storage, not an optimizable asset
+            <img
+              src={offer.image_url}
+              alt={offer.service_name ? `${offer.service_name} package` : 'Package offer'}
+              className="my-2 max-h-64 w-full rounded-md object-cover"
+            />
+          ) : null}
           <p>
             <span className="text-base font-semibold">
               {offer.total_sessions} sessions

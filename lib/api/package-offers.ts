@@ -19,6 +19,8 @@ export interface PackageOfferRow {
   price_per_session_cents: number;
   total_price_cents: number;
   message?: string | null;
+  /** Public URL of the offer graphic (Storage bucket offer-images), when the coach attached one. */
+  image_url?: string | null;
   status: PackageOfferStatus;
   created_package_id?: string | null;
   sent_at?: string | null;
