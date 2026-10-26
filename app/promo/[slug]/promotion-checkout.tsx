@@ -24,6 +24,7 @@ export function PromotionCheckout({
 }) {
   const [email, setEmail] = useState('');
   const [name, setName] = useState('');
+  const [phone, setPhone] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -38,15 +39,16 @@ export function PromotionCheckout({
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
-    if (!email.trim()) {
-      setError('Email is required.');
+    if (!name.trim() || !phone.trim() || !email.trim()) {
+      setError('Name, phone and email are all required.');
       return;
     }
     setBusy(true);
     try {
       const { checkout_url } = await startPromotionCheckout(slug, {
         email: email.trim(),
-        name: name.trim() || undefined,
+        name: name.trim(),
+        phone: phone.trim(),
       });
       window.location.assign(checkout_url);
     } catch (err) {
@@ -63,7 +65,20 @@ export function PromotionCheckout({
       ) : null}
       <div className="space-y-1">
         <Label htmlFor="promo-name">Name</Label>
-        <Input id="promo-name" value={name} onChange={(e) => setName(e.target.value)} autoComplete="name" />
+        <Input id="promo-name" required value={name} onChange={(e) => setName(e.target.value)} autoComplete="name" />
+      </div>
+      <div className="space-y-1">
+        <Label htmlFor="promo-phone">Phone</Label>
+        <Input
+          id="promo-phone"
+          type="tel"
+          required
+          value={phone}
+          onChange={(e) => setPhone(e.target.value)}
+          autoComplete="tel"
+          inputMode="tel"
+        />
+        <p className="text-xs text-muted-foreground">Your coach will text or call to set up your first session.</p>
       </div>
       <div className="space-y-1">
         <Label htmlFor="promo-email">Email</Label>
