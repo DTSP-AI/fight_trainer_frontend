@@ -19,6 +19,19 @@ function fmtCents(cents: number): string {
   return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(cents / 100);
 }
 
+/** Deadline in the gym's zone, e.g. "Nov 26, 2026, 11:59 PM EST". */
+function fmtDeadline(iso: string, timeZone: string | null | undefined): string {
+  return new Intl.DateTimeFormat('en-US', {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+    timeZone: timeZone ?? 'UTC',
+    timeZoneName: 'short',
+  }).format(new Date(iso));
+}
+
 export async function generateMetadata({ params }: { params: Promise<Params> }): Promise<Metadata> {
   const { slug } = await params;
   const promo = await getPublicPromotion(slug);
@@ -44,7 +57,10 @@ export default async function PromotionPage({
 
   const paid = query.paid === '1';
   const cancelled = query.cancelled === '1';
-  const regular = promo.total_sessions * promo.price_per_session_cents;
+  const savings =
+    promo.savings_cents != null && promo.regular_value_cents != null && promo.savings_cents > 0
+      ? { regular: promo.regular_value_cents, saved: promo.savings_cents }
+      : null;
 
   return (
     <>
@@ -76,22 +92,37 @@ export default async function PromotionPage({
             ) : null}
 
             <div className="mt-8 rounded-lg border border-border bg-card p-6">
-              <p className="text-4xl font-semibold">{fmtCents(promo.total_price_cents)}</p>
-              <p className="mt-1 text-sm text-muted-foreground">
+              <p className="text-4xl font-semibold">
+                {fmtCents(promo.total_price_cents)}
+                <span className="ml-2 text-base font-normal text-muted-foreground">package price</span>
+              </p>
+              {savings ? (
+                <p className="mt-1 text-sm">
+                  <span className="text-muted-foreground line-through">{fmtCents(savings.regular)} regular value</span>
+                  <span className="ml-2 font-medium text-primary">You save {fmtCents(savings.saved)}</span>
+                </p>
+              ) : null}
+              <p className="mt-2 text-sm text-muted-foreground">
                 {promo.total_sessions} sessions
                 {promo.duration_minutes ? ` · ${promo.duration_minutes} min each` : ''}
                 {' · '}
-                {fmtCents(promo.price_per_session_cents)} per session
+                {promo.per_session_is_approximate
+                  ? `about ${fmtCents(promo.price_per_session_cents)} per session`
+                  : `${fmtCents(promo.price_per_session_cents)} per session`}
               </p>
-              {regular !== promo.total_price_cents ? null : null}
+              {promo.per_session_is_approximate ? (
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Per-session figure is rounded. You pay {fmtCents(promo.total_price_cents)} total.
+                </p>
+              ) : null}
               {promo.per_customer_limit ? (
                 <p className="mt-2 text-xs text-muted-foreground">
-                  Limit {promo.per_customer_limit} per customer.
+                  Limit {promo.per_customer_limit} packages per customer.
                 </p>
               ) : null}
               {promo.ends_at ? (
                 <p className="mt-1 text-xs text-muted-foreground">
-                  Available until {new Date(promo.ends_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}.
+                  Purchase by {fmtDeadline(promo.ends_at, promo.timezone)}.
                 </p>
               ) : null}
 
