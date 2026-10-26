@@ -13,11 +13,21 @@ export interface PublicPromotion {
   service_name?: string | null;
   duration_minutes?: number | null;
   total_sessions: number;
-  price_per_session_cents: number;
+  /** Canonical package price: what Stripe charges and the package records. */
   total_price_cents: number;
+  /** Display figure; when `per_session_is_approximate` it is the total / sessions rounded to the cent. */
+  price_per_session_cents: number;
+  per_session_is_approximate: boolean;
+  /** The service's list price per session and that price x sessions. */
+  regular_price_per_session_cents?: number | null;
+  regular_value_cents?: number | null;
+  /** regular_value_cents - total_price_cents, only when the promotion is cheaper. */
+  savings_cents?: number | null;
   image_url?: string | null;
   starts_at?: string | null;
   ends_at?: string | null;
+  /** IANA zone of the gym; deadlines are shown in it. */
+  timezone?: string | null;
   per_customer_limit?: number | null;
   status: 'live' | 'sold_out' | 'unavailable';
 }
