@@ -62,7 +62,7 @@ export class PromotionCheckoutError extends Error {
 
 export async function startPromotionCheckout(
   slug: string,
-  input: { email: string; name?: string },
+  input: { email: string; name: string; phone: string },
 ): Promise<PromotionCheckoutResult> {
   const res = await fetch(`${API_BASE}/api/promotions/public/${encodeURIComponent(slug)}/checkout`, {
     method: 'POST',
